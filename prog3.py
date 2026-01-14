@@ -4,7 +4,7 @@ from collections import deque
 import paho.mqtt.client as mqtt
 
 # --- CONFIG ---
-MQTT_BROKER = "192.168.68.110"
+MQTT_BROKER = "192.168.137.150"
 MQTT_PORT = 1883
 MQTT_TOPIC = "performance/cpu"
 
