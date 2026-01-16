@@ -1,0 +1,6 @@
+sense-hat
+numpy
+scipy
+paho-mqtt
+psutil
+
