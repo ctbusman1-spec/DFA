@@ -15,7 +15,7 @@ import sys
 
 # ===================== USER SETTINGS =====================
 SAMPLE_RATE_HZ = 20
-LOG_FILENAME = "sensor_log_2.csv"   # Change this easily
+LOG_FILENAME = "sensor_log_3.csv"   # Change this easily
 CALIB_SECONDS = 2.0                # Keep device still during this time
 COUNTDOWN_SECONDS = 3              # 3s still before & after run (helps segmentation)
 G_TO_MPS2 = 9.81
