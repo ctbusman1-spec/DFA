@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 # ===================== USER SETTINGS =====================
-CSV_PATH = "sensor_log_3.csv"   # <-- zet hier je Pi log bestand neer
+CSV_PATH = "sensor_log_5.csv"   # <-- zet hier je Pi log bestand neer
 USE_DT_COLUMN_IF_EXISTS = True
 
 # columns (script probeert ook automatisch te vinden)

@@ -1,5 +1,5 @@
 # Bayes_offline.py
-# Offline integration: Pi CSV -> yaw integration -> move events -> Bayes map correction
+# Robust offline: Pi CSV -> detect STILL blocks -> MOVE events between them -> map-corrected heading
 
 import numpy as np
 import pandas as pd
@@ -7,15 +7,15 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 # ===================== USER SETTINGS =====================
-CSV_PATH = "sensor_log_5.csv"   # <-- pas dit aan naar jouw bestandnaam
+CSV_PATH = "sensor_log_5.csv"   # <-- zet hier jouw bestandnaam
 
-# --- Motion segmentation tuned for YOUR desk experiment ---
-# In your log gyro_z is often small, and move segments can be short.
-GYRO_MOVING_THRESH = 0.04       # rad/s  (was 0.08; now easier)
-ACC_MOVING_THRESH  = 0.25       # m/s^2  fallback if gyro doesn't trigger
+# --- STILL detection via rolling statistics (robust) ---
+WIN_SAMPLES = 20                 # ~1s if ~20Hz; ~0.4s if ~50Hz
+ACC_STD_STILL_THRESH = 0.06      # m/s^2  (low variation = still)
+GZ_MEAN_STILL_THRESH = 0.05      # rad/s  (low rotation = still)
 
-MIN_STILL_SECONDS = 1.0         # was 2.0; now easier
-MIN_MOVE_SECONDS  = 0.25        # was 0.7; now easier
+MIN_STILL_SECONDS = 1.5          # pause must be at least this long
+MIN_MOVE_SECONDS  = 0.4          # move segment must be at least this long
 
 # --- Bayes model parameters ---
 MAP_H, MAP_W = 100, 100
@@ -28,13 +28,10 @@ SIGMA_R_PX = 3.0
 N_ANGLES = 360
 R_MIN = 1
 R_MAX_EXTRA = 6
-SIGMA_THETA = 0.35              # rad (~20 deg)
+SIGMA_THETA = 0.35               # rad (~20 deg)
 
 # ===================== FLOORPLAN PRIOR (demo) =====================
 def make_demo_floorplan_prior(h, w, draw_value=20.0, sigma=3.0):
-    """
-    Demo map: big square corridor. Replace with your real floorplan later.
-    """
     m = np.zeros((h, w), dtype=float)
 
     top, bottom = int(0.15*h), int(0.85*h)
@@ -46,7 +43,6 @@ def make_demo_floorplan_prior(h, w, draw_value=20.0, sigma=3.0):
     m[top:bottom, right] = draw_value
 
     pdf = gaussian_filter(m, sigma=sigma)
-
     if np.max(pdf) > 0:
         pdf = pdf / np.max(pdf)
     pdf = pdf / np.sum(pdf)
@@ -112,10 +108,11 @@ def fuse_angle(p_map, p_imu, eps=1e-12):
 def wrap_pi(a):
     return (a + np.pi) % (2*np.pi) - np.pi
 
-# ===================== CSV / IMU HELPERS (MATCH YOUR LOG) =====================
+# ===================== IMU HELPERS (match your logs) =====================
 def compute_dt(df):
     dt = df["dt"].astype(float).values
     dt = np.clip(dt, 1e-4, 0.2)
+    # occasional spikes exist; clip helps
     return dt
 
 def integrate_yaw(df, dt):
@@ -131,7 +128,7 @@ def accel_lin_magnitude(df):
     az = df["accel_lin_z_mps2"].astype(float).values
     return np.sqrt(ax**2 + ay**2 + az**2)
 
-# ===================== EVENT DETECTION =====================
+# ===================== RUN / SEGMENT HELPERS =====================
 def build_runs(mask, dt):
     runs = []
     n = len(mask)
@@ -147,76 +144,104 @@ def build_runs(mask, dt):
         i = j
     return runs
 
-def detect_move_events(df, dt,
-                       gyro_thresh=0.05, acc_thresh=0.45,
-                       min_still_s=1.0, min_move_s=0.25):
-    """
-    Detect MOVE segments using:
-      moving = (|gyro_z| > gyro_thresh) OR (|acc_lin| > acc_thresh)
-    Then keep MOVE runs that are next to a sufficiently long STILL run.
-    """
-    gz = df["gyro_z"].astype(float).values
-    acc_mag = accel_lin_magnitude(df)
+def rolling_std(x, win):
+    s = pd.Series(x).rolling(win, center=True, min_periods=win).std()
+    s = s.bfill().ffill()
+    return s.values
 
-    moving = (np.abs(gz) > gyro_thresh) | (acc_mag > acc_thresh)
-    runs = build_runs(moving, dt)
+def rolling_mean(x, win):
+    s = pd.Series(x).rolling(win, center=True, min_periods=win).mean()
+    s = s.bfill().ffill()
+    return s.values
+
+def detect_move_events_from_still(df, dt, win=20,
+                                 acc_std_thresh=0.06,
+                                 gz_mean_thresh=0.05,
+                                 min_still_s=1.5,
+                                 min_move_s=0.4):
+    """
+    1) Detect STILL blocks robustly:
+       - low rolling std of accel_lin magnitude
+       - low rolling mean of |gyro_z|
+    2) Create MOVE events as segments BETWEEN consecutive STILL blocks.
+    """
+    acc_mag = accel_lin_magnitude(df)
+    gz_abs = np.abs(df["gyro_z"].astype(float).values)
+
+    acc_std = rolling_std(acc_mag, win)
+    gz_mean = rolling_mean(gz_abs, win)
+
+    still_mask = (acc_std < acc_std_thresh) & (gz_mean < gz_mean_thresh)
+
+    runs = build_runs(still_mask, dt)
+    still_blocks = [(a, b, dur) for (m, a, b, dur) in runs if m and dur >= min_still_s]
 
     # Diagnostics
-    still_durs = [dur for m,_,__,dur in runs if not m]
-    move_durs  = [dur for m,_,__,dur in runs if m]
-    print(f"[INFO] moving fraction: {moving.mean():.3f}")
-    print(f"[INFO] move run dur (s) p50/p90/p99/max: "
-          f"{np.percentile(move_durs,[50,90,99]).round(3)} / {np.max(move_durs):.3f}")
-    print(f"[INFO] still run dur (s) p50/p90/p99/max: "
-          f"{np.percentile(still_durs,[50,90,99]).round(3)} / {np.max(still_durs):.3f}")
-    print(f"[INFO] |gyro_z| stats p50/p95/max: "
-          f"{np.percentile(np.abs(gz),[50,95]).round(3)} / {np.max(np.abs(gz)):.3f}")
-    print(f"[INFO] |acc_lin| stats p50/p95/max: "
-          f"{np.percentile(acc_mag,[50,95]).round(3)} / {np.max(acc_mag):.3f}")
+    print(f"[INFO] acc_std p10/p50/p90/max: "
+          f"{np.percentile(acc_std,[10,50,90]).round(3)} / {np.max(acc_std):.3f}")
+    print(f"[INFO] gz_mean p10/p50/p90/max: "
+          f"{np.percentile(gz_mean,[10,50,90]).round(3)} / {np.max(gz_mean):.3f}")
+    print(f"[INFO] Found {len(still_blocks)} STILL blocks (>= {min_still_s}s).")
 
+    if len(still_blocks) < 2:
+        return [], still_mask
+
+    # MOVE events = between end of still_i and start of still_{i+1}
     events = []
-    for r_idx, (m, a, b, dur) in enumerate(runs):
-        if m and dur >= min_move_s:
-            prev_ok = (r_idx > 0 and runs[r_idx-1][0] is False and runs[r_idx-1][3] >= min_still_s)
-            next_ok = (r_idx < len(runs)-1 and runs[r_idx+1][0] is False and runs[r_idx+1][3] >= min_still_s)
-            if prev_ok or next_ok:
-                events.append((a, b))
-    return events
+    for i in range(len(still_blocks) - 1):
+        a_end = still_blocks[i][1]
+        b_start = still_blocks[i+1][0]
+        move_start = a_end + 1
+        move_end = b_start - 1
+        if move_end <= move_start:
+            continue
+        move_dur = float(dt[move_start:move_end+1].sum())
+        if move_dur >= min_move_s:
+            events.append((move_start, move_end))
 
-# ===================== MAIN OFFLINE PIPELINE =====================
+    return events, still_mask
+
+# ===================== MAIN =====================
 def main():
     df = pd.read_csv(CSV_PATH)
+
+    needed = ["dt","gyro_z","accel_lin_x_mps2","accel_lin_y_mps2","accel_lin_z_mps2"]
+    if not all(c in df.columns for c in needed):
+        raise ValueError(f"CSV mist kolommen. Nodig: {needed}\nGevonden: {list(df.columns)}")
+
     dt = compute_dt(df)
     gz, yaw_imu = integrate_yaw(df, dt)
 
     print(f"[INFO] Loaded {len(df)} samples from {CSV_PATH}")
-    print(f"[INFO] Columns OK: dt, gyro_z, accel_lin_* present = "
-          f"{all(c in df.columns for c in ['dt','gyro_z','accel_lin_x_mps2','accel_lin_y_mps2','accel_lin_z_mps2'])}")
 
-    move_events = detect_move_events(
+    move_events, still_mask = detect_move_events_from_still(
         df, dt,
-        gyro_thresh=GYRO_MOVING_THRESH,
-        acc_thresh=ACC_MOVING_THRESH,
+        win=WIN_SAMPLES,
+        acc_std_thresh=ACC_STD_STILL_THRESH,
+        gz_mean_thresh=GZ_MEAN_STILL_THRESH,
         min_still_s=MIN_STILL_SECONDS,
         min_move_s=MIN_MOVE_SECONDS
     )
 
-    print(f"[INFO] Found {len(move_events)} MOVE events.")
+    print(f"[INFO] Found {len(move_events)} MOVE events (between STILL blocks).")
     if len(move_events) == 0:
         print("[WARN] No move events detected.")
-        print("Try: lower GYRO_MOVING_THRESH to 0.03 and/or ACC_MOVING_THRESH to 0.35.")
+        print("Try these tweaks:")
+        print(" - Lower MIN_STILL_SECONDS to 1.0")
+        print(" - Increase ACC_STD_STILL_THRESH to 0.08")
+        print(" - Increase GZ_MEAN_STILL_THRESH to 0.08")
         return
 
-    # Floorplan prior (demo for now)
+    # Floorplan prior (demo)
     map_pdf = make_demo_floorplan_prior(MAP_H, MAP_W, DRAW_VALUE, SIGMA_MAP)
 
-    # Start position somewhere on corridor
+    # Start position
     xk, yk = int(0.2*MAP_W), int(0.2*MAP_H)
 
     traj_corr = [(xk, yk)]
     traj_imu  = [(xk, yk)]
     yaw_corr_list = [0.0]
-    yaw_imu_list = [0.0]
+    yaw_imu_list  = [0.0]
 
     for e_idx, (a, b) in enumerate(move_events, start=1):
         theta_imu = float(yaw_imu[b])
@@ -244,14 +269,17 @@ def main():
         xk2 = int(round(xk + STRIDE_PX * np.cos(theta_k)))
         yk2 = int(round(yk + STRIDE_PX * np.sin(theta_k)))
 
+        # keep inside bounds (just for nicer plots)
+        xk2 = int(np.clip(xk2, 0, MAP_W-1))
+        yk2 = int(np.clip(yk2, 0, MAP_H-1))
+
         print(f"[ev={e_idx:02d}] ok_xy={ok_xy} ok_th={ok_th} "
-              f"theta_imu={theta_imu:+.2f} -> theta_corr={theta_k:+.2f} | "
-              f"pos_corr=({xk},{yk})->({xk2},{yk2})")
+              f"theta_imu={theta_imu:+.2f} -> theta_corr={theta_k:+.2f} "
+              f"| pos=({xk},{yk})->({xk2},{yk2})")
 
         xk, yk = xk2, yk2
         traj_corr.append((xk, yk))
         yaw_corr_list.append(theta_k)
-        yaw_imu_list[-1] = theta_imu
 
     # ===== Plot trajectory =====
     plt.figure(figsize=(6,6))
