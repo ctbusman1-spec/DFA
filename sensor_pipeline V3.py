@@ -8,7 +8,7 @@ import sys
 
 # ===================== USER SETTINGS =====================
 SAMPLE_RATE_HZ = 20                 # Requested: 20 Hz
-LOG_FILENAME = "sensor_log_3.csv"   # Requested: easy to change name here
+LOG_FILENAME = "sensor_log_4.csv"   # Requested: easy to change name here
 CALIB_SECONDS = 2.0                # Keep device still during this time
 G_TO_MPS2 = 9.81                   # 1 g = 9.81 m/s^2
 
