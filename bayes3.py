@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 # ===================== USER SETTINGS =====================
-CSV_PATH = "sensor_log_5.csv"   # <-- zet hier jouw bestandnaam
+CSV_PATH = "sensor_log_6F.txt"   # <-- zet hier jouw bestandnaam
 
 # --- STILL detection via rolling statistics (robust) ---
 WIN_SAMPLES = 20                 # ~1s if ~20Hz; ~0.4s if ~50Hz

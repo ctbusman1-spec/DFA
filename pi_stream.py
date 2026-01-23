@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 
 # ===== USER SETTINGS =====
 MQTT_HOST = "192.168.137.1"   # <-- laptop IP (hotspot meestal 192.168.137.1)
-MQTT_PORT = 1883
+MQTT_PORT = 1884
 TOPIC = "dfa/imu"
 
 RATE_HZ = 20

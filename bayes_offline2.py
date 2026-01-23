@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 # ===================== USER SETTINGS =====================
-CSV_PATH = "sensor_log_5.csv"   # <-- pas dit aan naar jouw bestandnaam
+CSV_PATH = "sensor_log_6F.txt"   # <-- pas dit aan naar jouw bestandnaam
 
 # --- Motion segmentation tuned for YOUR desk experiment ---
 # In your log gyro_z is often small, and move segments can be short.
-GYRO_MOVING_THRESH = 0.04       # rad/s  (was 0.08; now easier)
-ACC_MOVING_THRESH  = 0.25       # m/s^2  fallback if gyro doesn't trigger
+GYRO_MOVING_THRESH = 0.02       # rad/s  (was 0.08; now easier)
+ACC_MOVING_THRESH  = 0.5       # m/s^2  fallback if gyro doesn't trigger
 
 MIN_STILL_SECONDS = 1.0         # was 2.0; now easier
 MIN_MOVE_SECONDS  = 0.25        # was 0.7; now easier
