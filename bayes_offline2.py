@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 # ===================== USER SETTINGS =====================
-CSV_PATH = "sensor_log_6F.txt"   # <-- pas dit aan naar jouw bestandnaam
+CSV_PATH = "sensor_log_6F.csv"   # <-- pas dit aan naar jouw bestandnaam
 
 # --- Motion segmentation tuned for YOUR desk experiment ---
 # In your log gyro_z is often small, and move segments can be short.

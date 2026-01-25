@@ -204,7 +204,7 @@ if __name__ == "__main__":
         right_corridor_drop_m=0.40  # <-- 40cm fix
     )
 
-    print(f"[INFO] Floorplan: {meta['W']}x{meta['H']} | start=({xk},{yk}) | drop={meta['right_corridor_drop_m']}m")
+    print(f"[INFO] Floorplan: {meta['W']}x{meta['H']} | start=({xk},{yk}) ")
 
     plt.figure(figsize=(9, 4))
     plt.imshow(map_pdf, origin="lower")
