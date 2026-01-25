@@ -4,17 +4,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
-# =========================
-# CHANGE THIS IN PYCHARM
-# =========================
-LOG_FILE = "imu_log_9.csv"   # <-- jouw naam
+LOG_FILE = "imu_log_78.csv"
 
-
-# =========================
-# YOUR FLOORPLAN CODE (unchanged, but meta now includes pad_m)
-# =========================
+# floorplan code
 CELL_CM = 10.0  # 10 cm per cell
 
+# convert to meters
 def m_to_cell(m: float) -> int:
     return int(round((m * 100.0) / CELL_CM))
 
@@ -34,6 +29,7 @@ def build_floorplan_prior_filled(
     mirror_vertically: bool = True,
     right_corridor_drop_m: float = 0.40,
 ):
+    # Cedric's room and hallway parameters
     W_TOTAL = 7.0
     CORR_W = 0.8
     H_LEFT = 2.3
@@ -59,31 +55,31 @@ def build_floorplan_prior_filled(
         y = pad + m_to_cell(y_m)
         return x, y
 
-    # 1) Left block
+    # Left block
     x0, y0 = to_grid(0.0, 0.0)
     add_rect(floor, x0, y0, m_to_cell(X_JUNCTION), m_to_cell(H_LEFT), draw_value)
 
-    # 2) Top cap strip
+    # Top cap strip
     x0, y0 = to_grid(0.0, 0.0)
     add_rect(floor, x0, y0, m_to_cell(X_JUNCTION), m_to_cell(CORR_W), draw_value)
 
-    # 3) Right corridor (shifted down by 0.40m)
+    # Right corridor
     x0, y0 = to_grid(X_JUNCTION, right_corridor_drop_m)
     add_rect(floor, x0, y0, m_to_cell(RIGHT_LEN), m_to_cell(CORR_W), draw_value)
 
-    # 4) Vertical stem at junction (also starts at dropped height)
+    # Vertical stem at junction
     stem_height = max(0.0, H_TOTAL - right_corridor_drop_m)
     x0, y0 = to_grid(X_JUNCTION - CORR_W, right_corridor_drop_m)
     add_rect(floor, x0, y0, m_to_cell(CORR_W), m_to_cell(stem_height), draw_value)
 
-    # 5) Bottom step inside left block
+    # Bottom step inside left block
     x0, y0 = to_grid(0.0, H_LEFT - CORR_W)
     add_rect(floor, x0, y0, m_to_cell(X_STEP), m_to_cell(CORR_W), draw_value)
 
     x0, y0 = to_grid(X_STEP, H_LEFT - CORR_W)
     add_rect(floor, x0, y0, m_to_cell(X_REMAIN), m_to_cell(CORR_W), draw_value)
 
-    # Smooth -> normalize
+    # Smooth --> normalize
     sm = gaussian_filter(floor, sigma=sigma_cells)
     if sm.max() > 0:
         sm = (sm / sm.max()) * max_prob_cap
@@ -113,9 +109,8 @@ def build_floorplan_prior_filled(
     return prior, (sx, sy), meta
 
 
-# =========================
-# Helpers to map meters -> cells (consistent with your prior)
-# =========================
+
+# map meters -> cells
 def meters_to_cell_xy(x_m: float, y_m: float, meta: dict):
     pad = meta["pad_cells"]
     H = meta["H"]
@@ -140,7 +135,7 @@ def main():
         hz = 1.0 / df.loc[df["dt"] > 0, "dt"].mean()
         print(f"[INFO] Estimated Hz: {hz:.1f}")
 
-    # build your prior (THIS is photo 2)
+    # build the floorplan
     prior, (sx, sy), meta = build_floorplan_prior_filled(
         sigma_cells=1.6,
         mirror_vertically=True,
@@ -155,7 +150,7 @@ def main():
     else:
         xs, ys = None, None
 
-    # walkable check in CELL space: “walkable” = prior > 0 at that cell
+    # walkable check in CELL space
     outside = None
     if xs is not None:
         valid = []
@@ -169,9 +164,8 @@ def main():
         outside = (~valid).sum()
         print(f"[INFO] Outside-walkable (prior-based): {outside}/{len(valid)} ({100*outside/len(valid):.1f}%)")
 
-    # =========================
-    # Plot 1: Prior + trajectory overlay (what you want)
-    # =========================
+
+    # Plot 1: Prior + trajectory overlay
     plt.figure(figsize=(10, 4))
     plt.imshow(prior, origin="lower")  # same style as your test
     plt.scatter([sx], [sy], s=60, label="start")
@@ -182,12 +176,13 @@ def main():
             bad = np.where(~valid)[0]
             plt.scatter(xs[bad], ys[bad], s=8, label="outside", alpha=0.7)
 
-    plt.title("Floorplan prior + trajectory (cell coords)")
+    #plot results
+    plt.title("Floorplan + trajectory (cell coords)")
     plt.legend()
     plt.tight_layout()
-    out_png = os.path.splitext(os.path.basename(LOG_FILE))[0] + "_prior_overlay.png"
+    out_png = os.path.splitext(os.path.basename(LOG_FILE))[0] + "_overlay.png"
     plt.savefig(out_png, dpi=160)
-    print(f"[OK] Saved: {out_png}")
+    print(f"Saved: {out_png}")
     plt.show()
 
 
