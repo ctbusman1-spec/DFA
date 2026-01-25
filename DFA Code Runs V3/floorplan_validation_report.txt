@@ -1,0 +1,14 @@
+================================================================================
+FLOORPLAN VALIDATION REPORT
+================================================================================
+
+Floorplan Dimensions: 80×48 cells
+Cell Size: 10.0 cm
+Floorplan Size: 8.00m × 4.80m
+Start Position: (15, 35) cells = (1.0, 0.7) m
+
+WALKABILITY RESULTS:
+  Total Samples:    871
+  Inside Walkable:  871
+  Outside Walkable: 0
+  Walkability:      100.00%
