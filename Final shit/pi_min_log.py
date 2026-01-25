@@ -157,7 +157,7 @@ def main():
 
     # CSV file
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = f"imu_log_1.csv"
+    out_file = f"imu_log_3.csv"
     print(f"[INFO] Logging to {out_file} for {cfg.log_seconds}s @ {cfg.hz}Hz")
 
     with open(out_file, "w", newline="") as f:
