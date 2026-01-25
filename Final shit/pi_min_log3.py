@@ -86,7 +86,7 @@ class Config:
     # Gyro yaw integration
     # IMPORTANT: choose the axis that corresponds to yaw in YOUR mounting.
     # If unsure: start with "y" (you earlier saw gyro_y variance highest).
-    YAW_AXIS: str = "y"  # "x" or "y" or "z"
+    YAW_AXIS: str = "z"  # "x" or "y" or "z"
 
     # Bias learning
     BIAS_WINDOW_S: float = 2.0      # window length for bias estimation while STILL
@@ -200,7 +200,7 @@ def main():
     yaw = GyroYaw(cfg)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = f"imu_log_8.csv"
+    out_file = f"imu_log_9.csv"
 
     print(f"[INFO] Logging -> {out_file}")
     print(f"[INFO] LOG_SECONDS={cfg.LOG_SECONDS} | TARGET_HZ={cfg.TARGET_HZ} | STRIDE={cfg.STRIDE_M}")

@@ -7,7 +7,7 @@ from scipy.ndimage import gaussian_filter
 # =========================
 # CHANGE THIS IN PYCHARM
 # =========================
-LOG_FILE = "Synthetic-test-data.csv"   # <-- jouw naam
+LOG_FILE = "imu_log_8.csv"   # <-- jouw naam
 
 
 # =========================
