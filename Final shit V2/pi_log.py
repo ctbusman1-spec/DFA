@@ -55,7 +55,7 @@ class Config:
 
     # Start pose
     START_X_M: float = 1.0
-    START_Y_M: float = 0.25
+    START_Y_M: float = 0.7
 
     # Stride length
     STRIDE_M: float = 0.45
@@ -182,7 +182,7 @@ def main():
     yaw = GyroYaw(cfg)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = f"imu_log_78.csv"
+    out_file = f"imu_log_79.csv"
 
     print(f"Logging -> {out_file}")
     print(f"LOG_SECONDS={cfg.LOG_SECONDS} | TARGET_HZ={cfg.TARGET_HZ} | STRIDE={cfg.STRIDE_M}")
