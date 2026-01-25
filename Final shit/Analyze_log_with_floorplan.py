@@ -7,7 +7,7 @@ from scipy.ndimage import gaussian_filter
 # =========================
 # CHANGE THIS IN PYCHARM
 # =========================
-LOG_FILE = "imu_log_9.csv"   # <-- jouw naam
+LOG_FILE = "../Final shit V2/imu_log_79.csv"  # <-- jouw naam
 
 
 # =========================
@@ -47,7 +47,7 @@ def build_floorplan_prior_filled(
     X_REMAIN = 0.6
 
     START_X = 1.0
-    START_Y = 0.25
+    START_Y = 0.6
 
     pad = m_to_cell(pad_m)
     W = m_to_cell(W_TOTAL + 2 * pad_m)

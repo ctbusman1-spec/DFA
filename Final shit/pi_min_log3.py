@@ -192,7 +192,7 @@ def main():
     print("[INFO] Press joystick (middle) to stop logging.")
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = "imu_log_79.csv"  # or f"imu_log_{ts}.csv"
+    out_file = "../Final shit V2/imu_log_79.csv"  # or f"imu_log_{ts}.csv"
 
     print(f"Logging -> {out_file}")
     print(f"LOG_SECONDS={cfg.LOG_SECONDS} | TARGET_HZ={cfg.TARGET_HZ} | STRIDE={cfg.STRIDE_M}")

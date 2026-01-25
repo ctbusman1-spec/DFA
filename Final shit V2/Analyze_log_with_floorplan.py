@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
-LOG_FILE = "imu_log_78.csv"
+LOG_FILE = "imu_log_79.csv"
 
 # floorplan code
 CELL_CM = 10.0  # 10 cm per cell
