@@ -142,7 +142,7 @@ class StepMoveDetector:
 
 
 def main():
-    cfg = Config()
+    cfg = Config(hz=32.0)
     hat = SenseHat()
     fp = NewFloorplan()
     det = StepMoveDetector(cfg)
