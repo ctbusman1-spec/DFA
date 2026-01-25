@@ -21,10 +21,10 @@ MQTT_PORT = 1883
 MQTT_TOPIC = "performance/cpu"
 
 PUBLISH_INTERVAL_S = 0.01          # ~10ms
-QOS = 0                            # assignment doesn't require QoS>0; keep lightweight
+QOS = 0                            # assignment doesn't require QoS>0
 KEEPALIVE = 60
 
-# Print a short status line every N seconds (avoid console spam at 100 Hz)
+# Print a short status line every second
 PRINT_EVERY_S = 1.0
 
 
@@ -49,15 +49,15 @@ def get_cpu_temp_c():
 
 def on_connect(client, userdata, flags, reason_code, properties=None):
     if reason_code == 0:
-        print("✅ MQTT connected")
+        print("MQTT connected")
     else:
-        print(f"❌ MQTT connect failed, reason_code={reason_code}")
+        print(f"MQTT connect failed, reason_code={reason_code}")
 
 
 def on_disconnect(client, userdata, reason_code, properties=None):
-    # 0 = clean disconnect; nonzero means unexpected drop
+    # 0 = clean disconnect
     if reason_code != 0:
-        print(f"⚠️ MQTT disconnected unexpectedly, reason_code={reason_code}")
+        print(f"MQTT disconnected unexpectedly, reason_code={reason_code}")
 
 
 def main():
@@ -70,11 +70,10 @@ def main():
     # Auto-reconnect behavior
     client.reconnect_delay_set(min_delay=1, max_delay=30)
 
-    print(f"Poging tot verbinden met MQTT broker {MQTT_BROKER}:{MQTT_PORT} ...")
+    print(f"Connecting to MQTT broker {MQTT_BROKER}:{MQTT_PORT} ...")
     client.connect(MQTT_BROKER, MQTT_PORT, KEEPALIVE)
     client.loop_start()
 
-    # Prime cpu_percent to avoid weird first measurement
     psutil.cpu_percent(None)
 
     print(f"Publishing to topic '{MQTT_TOPIC}' every ~{int(PUBLISH_INTERVAL_S*1000)} ms ... (Ctrl+C to stop)")
@@ -91,11 +90,11 @@ def main():
             vm = psutil.virtual_memory()
 
             payload = {
-                # Timestamps (important for time alignment in DSMS)
+                # Timestamps
                 "timestamp_ms": now_ms,
                 "timestamp_iso_utc": iso_utc_ms(),
 
-                # Identification (useful if you later add more Pis)
+                # Identification
                 "host": hostname,
 
                 # Performance metrics
@@ -104,13 +103,12 @@ def main():
                 "ram_pct": vm.percent,
                 "ctx_switches": cpu_stats.ctx_switches,
 
-                # Optional extras (nice-to-have, harmless if None)
+                # Optional extra
                 "cpu_temp_c": get_cpu_temp_c(),
             }
 
             client.publish(MQTT_TOPIC, json.dumps(payload), qos=QOS)
 
-            # Light logging (once per second)
             now = time.time()
             if now - last_print >= PRINT_EVERY_S:
                 last_print = now
@@ -121,14 +119,14 @@ def main():
             sleep_time = PUBLISH_INTERVAL_S - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
-            # If sleep_time <= 0: system is too slow to hit 100Hz; that's okay ("if possible")
+            # If sleep_time <= 0
 
     except KeyboardInterrupt:
-        print("\nProgramma gestopt door gebruiker.")
+        print("\nProgram stopped by user.")
     finally:
         client.loop_stop()
         client.disconnect()
-        print("Verbinding verbroken.")
+        print("Disconnected.")
 
 
 if __name__ == "__main__":

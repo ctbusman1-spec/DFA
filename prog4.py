@@ -4,16 +4,16 @@ import random
 from collections import deque
 import paho.mqtt.client as mqtt
 
-# --- CONFIG ---
+# CONFIG
 MQTT_BROKER = "192.168.137.150"
 MQTT_PORT = 1883
 MQTT_TOPIC = "performance/cpu"
 
-WINDOW_SECONDS = 1.0        # Run two instances: 0.1 and 1.0
+WINDOW_SECONDS = 1.0
 PRINT_EVERY_SECONDS = 0.5
 P_KEEP = 1/3                # Bernoulli sampling probability (≈33%)
 
-# Store tuples: (t_received, cpu_pct)
+# (t_received, cpu_pct)
 window = deque()
 
 def prune(now: float):
@@ -23,10 +23,10 @@ def prune(now: float):
 
 def on_connect(client, userdata, flags, reason_code, properties=None):
     if reason_code == 0:
-        print(f"✅ Connected. Subscribing to '{MQTT_TOPIC}' | window={WINDOW_SECONDS}s | p={P_KEEP:.2f}")
+        print(f"Connected. Subscribing to '{MQTT_TOPIC}' | window={WINDOW_SECONDS}s | p={P_KEEP:.2f}")
         client.subscribe(MQTT_TOPIC, qos=0)
     else:
-        print(f"❌ Connect failed: {reason_code}")
+        print(f"Connect failed: {reason_code}")
 
 def on_message(client, userdata, msg):
     # --- Bernoulli sampling step (Program 4 core) ---
@@ -42,7 +42,7 @@ def on_message(client, userdata, msg):
         prune(now)
 
     except Exception as e:
-        print(f"⚠️ Error processing message: {e}")
+        print(f"Error processing message: {e}")
 
 def main():
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)

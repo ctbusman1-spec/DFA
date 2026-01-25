@@ -3,7 +3,7 @@
 DFA - Program 2
 Publishes Sense HAT data and a Bayesian predicted location estimate.
 
-- Reads Sense HAT accelerometer every ~10 ms (if possible)
+- Reads Sense HAT accelerometer every ~10 ms
 - Uses a simple 2D Kalman filter (Bayesian estimator) with acceleration as input
 - When stationary, applies a zero-velocity update to reduce drift
 - Publishes:
@@ -21,7 +21,7 @@ import numpy as np
 import paho.mqtt.client as mqtt
 from sense_hat import SenseHat
 
-# === CONFIG ===
+# CONFIG
 MQTT_BROKER = "localhost"          # Mosquitto on the Pi
 MQTT_PORT = 1883
 RAW_TOPIC = "sensehat/raw_data"
@@ -35,7 +35,7 @@ KEEPALIVE = 60
 # If device is lying still, a_x and a_y should be near 0.
 STATIONARY_ACCEL_THRESH = 0.2
 
-# How often to print a short status line (seconds)
+# How often to print a short status line
 PRINT_EVERY_S = 1.0
 
 
@@ -51,18 +51,6 @@ def main():
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
     client.connect(MQTT_BROKER, MQTT_PORT, KEEPALIVE)
     client.loop_start()
-
-    # ----------------------------
-    # Bayesian estimator: Kalman filter
-    # State: [x, y, vx, vy]^T  (meters, meters, m/s, m/s)
-    # Control input: ax, ay (m/s^2) from accelerometer
-    # Process model:
-    #   x_{k+1} = x + vx*dt + 0.5*ax*dt^2
-    #   y_{k+1} = y + vy*dt + 0.5*ay*dt^2
-    #   vx_{k+1}= vx + ax*dt
-    #   vy_{k+1}= vy + ay*dt
-    # Measurement update (only when stationary): z = [vx, vy] ≈ [0, 0]
-    # ----------------------------
 
     x = np.zeros((4, 1))  # initial at origin, zero velocity
 
@@ -80,17 +68,17 @@ def main():
         [0, DT],
     ], dtype=float)
 
-    # Process noise (tuneable). Larger => more uncertainty growth.
+    # Process noise
     q = 0.2
     Q = (q ** 2) * np.eye(4)
 
-    # Measurement model for zero-velocity update (observe vx, vy)
+    # Measurement model for zero-velocity update
     H = np.array([
         [0, 0, 1, 0],
         [0, 0, 0, 1],
     ], dtype=float)
 
-    # Measurement noise for ZUPT (small => strong pull to zero)
+    # Measurement noise for ZUPT
     r = 0.05
     R = (r ** 2) * np.eye(2)
 
@@ -106,13 +94,13 @@ def main():
         while True:
             t0 = time.perf_counter()
 
-            # --- Read Sense HAT accelerometer (in g) ---
+            # Read Sense HAT accelerometer (g)
             acc = sense.get_accelerometer_raw()
-            ax = float(acc["x"]) * 9.81  # m/s^2
-            ay = float(acc["y"]) * 9.81  # m/s^2
-            az = float(acc["z"]) * 9.81  # m/s^2
+            ax = float(acc["x"]) * 9.81
+            ay = float(acc["y"]) * 9.81
+            az = float(acc["z"]) * 9.81
 
-            # Basic stationary detection (planar)
+            # Basic stationary detection
             a_xy = math.sqrt(ax * ax + ay * ay)
             stationary = a_xy < STATIONARY_ACCEL_THRESH
 
@@ -120,7 +108,7 @@ def main():
             ts_ms = int(time.time() * 1000)
             ts_iso = iso_utc_ms()
 
-            # --- Publish raw Sense HAT data ---
+            # Publish raw Sense HAT data
             raw_msg = {
                 "timestamp_ms": ts_ms,
                 "timestamp_iso_utc": ts_iso,
@@ -131,12 +119,11 @@ def main():
             }
             client.publish(RAW_TOPIC, json.dumps(raw_msg), qos=QOS)
 
-            # --- Kalman predict step (Bayesian prediction) ---
+            # Kalman predict step
             u = np.array([[ax], [ay]], dtype=float)
             x = F @ x + B @ u
             P = F @ P @ F.T + Q
 
-            # --- Optional measurement update (Bayesian correction) ---
             # If device is stationary, enforce vx, vy ≈ 0 (ZUPT)
             if stationary:
                 z = np.array([[0.0], [0.0]])
@@ -146,7 +133,7 @@ def main():
                 x = x + K @ y_res
                 P = (np.eye(4) - K @ H) @ P
 
-            # --- Publish predicted location ---
+            # Publish predicted location
             pred_msg = {
                 "timestamp_ms": ts_ms,
                 "timestamp_iso_utc": ts_iso,
@@ -159,7 +146,7 @@ def main():
             }
             client.publish(PRED_TOPIC, json.dumps(pred_msg), qos=QOS)
 
-            # Light logging
+            # Logging
             now = time.time()
             if now - last_print >= PRINT_EVERY_S:
                 last_print = now
