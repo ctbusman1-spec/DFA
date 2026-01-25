@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-# pi_imu_logger.py
-#
-# Robust DFA IMU logger for indoor pedestrian DR debugging.
-# Key idea: DO NOT trust magnetometer yaw near laptop/screens.
+# pi_mu_logger.py
+# DFA IMU logger for indoor pedestrian DR debugging.
 # Use gyro-yaw integration with bias correction learned during STILL.
-#
 # Output: CSV with accel/gyro, hp motion signal, state, step, heading, pos.
 
 import time
@@ -16,35 +13,30 @@ from collections import deque
 from sense_hat import SenseHat
 
 
-# -------------------------
-# Helpers
-# -------------------------
+# keeps heading between -pi and pi
 def wrap_pi(a: float) -> float:
     return (a + math.pi) % (2.0 * math.pi) - math.pi
 
 
-# -------------------------
-# Floorplan sanity (meters) - optional flag only
-# -------------------------
+# checks if point falls within the floorplan
 @dataclass
 class Rect:
     x0: float
     y0: float
     w: float
     h: float
+
     def contains(self, x: float, y: float) -> bool:
         return (self.x0 <= x <= self.x0 + self.w) and (self.y0 <= y <= self.y0 + self.h)
 
 
 class NewFloorplanMeters:
     """
-    Only used to log a walkable sanity flag.
-    Your laptop uses the raster prior for the real map.
+    creates floorplan meter object
     """
     def __init__(self):
         self.left_block = Rect(0.0, 0.0, 2.0, 2.3)
         self.right_corridor = Rect(2.0, 0.0, 5.0, 0.8)
-        # 40 cm drop fix
         vx0 = 2.0 + 5.0 - 0.8
         vy0 = 0.4
         vheight = 2.3
@@ -55,23 +47,21 @@ class NewFloorplanMeters:
         return any(r.contains(x, y) for r in self.rects)
 
 
-# -------------------------
 # Config
-# -------------------------
 @dataclass
 class Config:
     LOG_SECONDS: float = 40.0
     TARGET_HZ: float = 32.0
 
-    # Start pose must match your prior start
+    # Start pose
     START_X_M: float = 1.0
-    START_Y_M: float = 0.25
+    START_Y_M: float = 0.7
 
-    # Stride
-    STRIDE_M: float = 0.45
+    # Stride length
+    STRIDE_M: float = 0.55
 
     # Motion HP filter (for steps/still)
-    HP_ALPHA: float = 0.90   # 0.85–0.95
+    HP_ALPHA: float = 0.90
 
     # STILL detection
     STILL_HP_THR: float = 0.03
@@ -84,24 +74,17 @@ class Config:
     STEP_MIN_INTERVAL_S: float = 0.30
 
     # Gyro yaw integration
-    # IMPORTANT: choose the axis that corresponds to yaw in YOUR mounting.
-    # If unsure: start with "y" (you earlier saw gyro_y variance highest).
-    YAW_AXIS: str = "z"  # "x" or "y" or "z"
+    YAW_AXIS: str = "z"
 
     # Bias learning
-    BIAS_WINDOW_S: float = 2.0      # window length for bias estimation while STILL
-    BIAS_MIN_STILL_S: float = 1.0   # need this much STILL time before using bias confidently
+    BIAS_WINDOW_S: float = 2.0
+    BIAS_MIN_STILL_S: float = 1.0
 
     # Map offset (radians)
-    # This rotates the IMU heading frame into your floorplan x-right direction.
-    # If your "forward" step should go along the top corridor (to the right),
-    # tune this once in ~0.2 rad steps.
     MAP_YAW_OFFSET_RAD: float = 0.0
 
 
-# -------------------------
 # Detector (STILL/MOVE + STEP)
-# -------------------------
 class StepMoveDetector:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -143,9 +126,7 @@ class StepMoveDetector:
         return state, step, self.hp
 
 
-# -------------------------
 # Gyro yaw integrator with bias learning
-# -------------------------
 class GyroYaw:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -181,16 +162,13 @@ class GyroYaw:
                 self.bias = sum(v for _, v in self.bias_samples) / len(self.bias_samples)
         else:
             self.still_accum = 0.0
-            # keep bias_samples as last window (helps stability)
 
-        # integrate (bias-corrected)
+        # integrate
         self.heading = wrap_pi(self.heading + (yaw_rate - self.bias) * dt)
         return self.heading, yaw_rate, self.bias
 
 
-# -------------------------
 # Main
-# -------------------------
 def main():
     cfg = Config()
     hat = SenseHat()
@@ -199,14 +177,27 @@ def main():
     det = StepMoveDetector(cfg)
     yaw = GyroYaw(cfg)
 
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = f"imu_log_9.csv"
+    # -------------------------
+    # Joystick stop flag
+    # -------------------------
+    stop_flag = [False]
 
-    print(f"[INFO] Logging -> {out_file}")
-    print(f"[INFO] LOG_SECONDS={cfg.LOG_SECONDS} | TARGET_HZ={cfg.TARGET_HZ} | STRIDE={cfg.STRIDE_M}")
-    print(f"[INFO] YAW_AXIS='{cfg.YAW_AXIS}' | MAP_YAW_OFFSET_RAD={cfg.MAP_YAW_OFFSET_RAD:.3f}")
-    print("[INFO] Protocol: put Pi on desk, run, keep STILL 5s, then walk, then STILL 5s.")
-    print("[INFO] NOTE: We ignore magnetometer yaw; gyro bias learned during STILL.")
+    def joystick_handler(event):
+        # Stop on joystick center press
+        if event.action == "pressed" and event.direction == "middle":
+            stop_flag[0] = True
+
+    # Catch any joystick press events
+    hat.stick.direction_any = joystick_handler
+    print("[INFO] Press joystick (middle) to stop logging.")
+
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out_file = "imu_log_79.csv"  # or f"imu_log_{ts}.csv"
+
+    print(f"Logging -> {out_file}")
+    print(f"LOG_SECONDS={cfg.LOG_SECONDS} | TARGET_HZ={cfg.TARGET_HZ} | STRIDE={cfg.STRIDE_M}")
+    print(f"YAW_AXIS='{cfg.YAW_AXIS}' | MAP_YAW_OFFSET_RAD={cfg.MAP_YAW_OFFSET_RAD:.3f}")
+    print("Protocol: keep STILL 5s, then walk, then STILL 5s.")
 
     # state
     x = cfg.START_X_M
@@ -228,68 +219,80 @@ def main():
             "heading_rad",
             "pos_x_m", "pos_y_m",
             "walkable",
-            # optional debug: sensor fusion yaw (not used)
             "sf_yaw_deg"
         ])
 
-        while True:
-            now = time.time()
-            t = now - t0
-            if t >= cfg.LOG_SECONDS:
-                break
+        try:
+            while True:
+                # Stop condition 1: joystick
+                if stop_flag[0]:
+                    print("[STOP] Joystick pressed. Stopping.")
+                    break
 
-            dt = now - last
-            last = now
-            if dt <= 0:
-                dt = 1e-6
-            dts.append(dt)
+                now = time.time()
+                t = now - t0
 
-            # read sensors
-            a = hat.get_accelerometer_raw()  # g
-            g = hat.get_gyroscope_raw()      # rad/s
-            # sensor fusion yaw for debug only
-            ori = hat.get_orientation()
-            sf_yaw_deg = float(ori["yaw"])
+                # Stop condition 2: time limit (kept as fallback)
+                if t >= cfg.LOG_SECONDS:
+                    print("[STOP] Reached LOG_SECONDS.")
+                    break
 
-            ax = float(a["x"]); ay = float(a["y"]); az = float(a["z"])
-            acc_mag = math.sqrt(ax*ax + ay*ay + az*az)
+                dt = now - last
+                last = now
+                if dt <= 0:
+                    dt = 1e-6
+                dts.append(dt)
 
-            gx = float(g["x"]); gy = float(g["y"]); gz = float(g["z"])
-            gyro_mag = math.sqrt(gx*gx + gy*gy + gz*gz)
+                # read sensors
+                a = hat.get_accelerometer_raw()  # g
+                g = hat.get_gyroscope_raw()      # rad/s
 
-            # detect motion & steps
-            state, step, hp = det.update(t, dt, acc_mag, gyro_mag)
+                # sensor fusion yaw for debug only
+                ori = hat.get_orientation()
+                sf_yaw_deg = float(ori["yaw"])
 
-            # heading from gyro integration (+ bias)
-            heading, yaw_rate_used, bias = yaw.update(t, dt, gx, gy, gz, det.is_still)
+                ax = float(a["x"]); ay = float(a["y"]); az = float(a["z"])
+                acc_mag = math.sqrt(ax * ax + ay * ay + az * az)
 
-            # rotate into map frame
-            heading_map = wrap_pi(heading + cfg.MAP_YAW_OFFSET_RAD)
+                gx = float(g["x"]); gy = float(g["y"]); gz = float(g["z"])
+                gyro_mag = math.sqrt(gx * gx + gy * gy + gz * gz)
 
-            # step-based position update
-            if step == 1:
-                step_count += 1
-                x += cfg.STRIDE_M * math.cos(heading_map)
-                y_pos += cfg.STRIDE_M * math.sin(heading_map)
+                # detect motion & steps
+                state, step, hp = det.update(t, dt, acc_mag, gyro_mag)
 
-            walkable = 1 if fp.is_walkable(x, y_pos) else 0
+                # heading from gyro integration (+ bias)
+                heading, yaw_rate_used, bias = yaw.update(t, dt, gx, gy, gz, det.is_still)
 
-            w.writerow([
-                f"{t:.6f}", f"{dt:.6f}",
-                f"{ax:.6f}", f"{ay:.6f}", f"{az:.6f}", f"{acc_mag:.6f}",
-                f"{gx:.6f}", f"{gy:.6f}", f"{gz:.6f}", f"{gyro_mag:.6f}",
-                f"{yaw_rate_used:.6f}", f"{bias:.6f}",
-                f"{hp:.6f}", state, step, step_count,
-                f"{heading_map:.6f}",
-                f"{x:.6f}", f"{y_pos:.6f}",
-                walkable,
-                f"{sf_yaw_deg:.3f}",
-            ])
+                # rotate into map frame
+                heading_map = wrap_pi(heading + cfg.MAP_YAW_OFFSET_RAD)
 
-            # sleep toward target Hz
-            target_dt = 1.0 / max(1.0, cfg.TARGET_HZ)
-            loop_time = time.time() - now
-            time.sleep(max(0.0, target_dt - loop_time))
+                # step-based position update
+                if step == 1:
+                    step_count += 1
+                    x += cfg.STRIDE_M * math.cos(heading_map)
+                    y_pos += cfg.STRIDE_M * math.sin(heading_map)
+
+                walkable = 1 if fp.is_walkable(x, y_pos) else 0
+
+                w.writerow([
+                    f"{t:.6f}", f"{dt:.6f}",
+                    f"{ax:.6f}", f"{ay:.6f}", f"{az:.6f}", f"{acc_mag:.6f}",
+                    f"{gx:.6f}", f"{gy:.6f}", f"{gz:.6f}", f"{gyro_mag:.6f}",
+                    f"{yaw_rate_used:.6f}", f"{bias:.6f}",
+                    f"{hp:.6f}", state, step, step_count,
+                    f"{heading_map:.6f}",
+                    f"{x:.6f}", f"{y_pos:.6f}",
+                    walkable,
+                    f"{sf_yaw_deg:.3f}",
+                ])
+
+                # sleep toward target Hz
+                target_dt = 1.0 / max(1.0, cfg.TARGET_HZ)
+                loop_time = time.time() - now
+                time.sleep(max(0.0, target_dt - loop_time))
+
+        except KeyboardInterrupt:
+            print("\n[STOP] Ctrl+C received. Stopping.")
 
     hz_eff = 1.0 / (sum(dts) / len(dts)) if len(dts) > 10 else float("nan")
 
@@ -297,10 +300,6 @@ def main():
     print(f"[DONE] Steps counted: {step_count}")
     print(f"[DONE] Effective Hz: {hz_eff:.1f}")
     print(f"[DONE] File: {out_file}")
-    print("[NEXT] Copy CSV to laptop and run your overlay analysis.")
-    print("[TUNING] If path is rotated vs corridor: adjust MAP_YAW_OFFSET_RAD by +/-0.3 rad and retry.")
-    print("[TUNING] If distance too long: reduce STRIDE_M (e.g., 0.40). If too short: increase (e.g., 0.50).")
-    print("[TUNING] If steps=0: lower STEP_ON_THR to 0.06 and STEP_OFF_THR to 0.03.")
 
 
 if __name__ == "__main__":
