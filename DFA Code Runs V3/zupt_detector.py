@@ -11,10 +11,6 @@ Implements stationary phase detection using multiple criteria:
 Optimized for Raspberry Pi - O(n) complexity, minimal memory
 Reference: Jiménez et al. (2010) Indoor Navigation System Using IMU
 
-Author: IMU Assignment Part 2
-Date: 2026-01-25
-"""
-
 import numpy as np
 from collections import deque
 import warnings
