@@ -148,7 +148,7 @@ def main():
     det = StepMoveDetector(cfg)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = f"imu_log_4.csv"
+    out_file = f"imu_log_5.csv"
 
     print(f"[INFO] Logging -> {out_file}")
     print(f"[INFO] Duration: {cfg.LOG_SECONDS}s | Target: {cfg.TARGET_HZ}Hz | Stride: {cfg.STRIDE_M}m")

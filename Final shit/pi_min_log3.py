@@ -200,7 +200,7 @@ def main():
     yaw = GyroYaw(cfg)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_file = f"imu_log_7.csv"
+    out_file = f"imu_log_8.csv"
 
     print(f"[INFO] Logging -> {out_file}")
     print(f"[INFO] LOG_SECONDS={cfg.LOG_SECONDS} | TARGET_HZ={cfg.TARGET_HZ} | STRIDE={cfg.STRIDE_M}")
