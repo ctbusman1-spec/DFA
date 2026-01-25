@@ -13,9 +13,6 @@ Optimized for Raspberry Pi:
 Reference: Welch & Bishop (2006) "An Introduction to the Kalman Filter"
 Jiménez et al. (2010) "Indoor Navigation System Using IMU"
 
-Author: IMU Assignment Part 2
-Date: 2026-01-25
-"""
 
 import numpy as np
 import warnings
