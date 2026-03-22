@@ -23,12 +23,12 @@ map:
   center_boost: 0.15
 
 offline_data:
-  csv_file: /mnt/data/ourcode/DFA Code Runs V3/Real-data-set-sensor_log_4.csv
+  csv_file: src/data/sensor_log_4.csv
   use_step_column: true
-  heading_column: heading_rad
-  step_column: step
+  heading_column: derived_heading
+  step_column: step_state
   dt_column: dt
-  timestamp_column: t
+  timestamp_column: timestamp
   fixed_step_length_m: 0.72
 
 live_data:
