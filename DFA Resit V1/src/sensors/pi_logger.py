@@ -48,7 +48,7 @@ def main() -> None:
     prev_time = start_wall
 
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"src/data/experiments/pi_sensor_log_{timestamp_str}.csv"
+    output_file = f"src/data/experiments/pi_sensor_log_still.csv"
     ensure_output_dir(output_file)
 
     print(f"Logging to: {output_file}")
