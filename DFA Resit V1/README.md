@@ -35,7 +35,7 @@ From the project root:
 
 ```bash
 python -m pip install -r requirements.txt
-python src/mapping/create_football_field_map.py
+python src/mapping/create_house_floorplan.py
 python src/main.py
 ```
 
@@ -61,7 +61,7 @@ python src/main.py --filter discrete_bayes
 3. Run:
 
 ```bash
-python src/mapping/create_football_field_map.py
+python src/mapping/create_house_floorplan.py
 python src/main.py --filter particle
 ```
 

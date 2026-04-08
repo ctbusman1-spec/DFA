@@ -25,19 +25,17 @@ def load_config(path: str | Path):
 
 
 def ensure_map(cfg):
-    map_path = PROJECT_ROOT / cfg["map"]["file"]
-    if map_path.exists():
-        return FloorMap.load(map_path)
-    fmap = FloorMap.create_football_field(
-        width_m=cfg["map"]["width_m"],
-        height_m=cfg["map"]["height_m"],
-        scale_m_per_cell=cfg["map"]["scale_m_per_cell"],
-        sigma_cells=cfg["map"]["sigma_cells"],
-        edge_decay=cfg["map"]["edge_decay"],
-        center_boost=cfg["map"]["center_boost"],
-    )
-    fmap.save(map_path)
-    return fmap
+    map_cfg = cfg["map"]
+    map_file = PROJECT_ROOT / map_cfg["file"]
+
+    floor_map = FloorMap.from_pickle(map_file)
+
+    print(f"Loaded floor map from: {map_file}")
+    print(f"Map size [m]: {floor_map.width_m:.2f} x {floor_map.height_m:.2f}")
+    print(f"Resolution [m/cell]: {floor_map.scale_m_per_cell:.3f}")
+    print(f"Origin [m]: ({floor_map.origin_x_m:.2f}, {floor_map.origin_y_m:.2f})")
+
+    return floor_map
 
 
 def build_filter(filter_name, floor_map, cfg):
@@ -50,8 +48,10 @@ def build_filter(filter_name, floor_map, cfg):
 
 def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
     od = cfg["offline_data"]
+    csv_file = PROJECT_ROOT / od["csv_file"]
+
     reader = OfflineIMUReader(
-        csv_file=od["csv_file"],
+        csv_file=csv_file,
         heading_col=od["heading_column"],
         step_col=od["step_column"],
         dt_col=od["dt_column"],
@@ -60,12 +60,12 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
     )
     model = build_filter(filter_name, floor_map, cfg)
     logger = DataLogger(PROJECT_ROOT / cfg["experiment"]["output_dir"])
-    occupancy = np.zeros(floor_map.shape, dtype=float)
+    occupancy = np.zeros(floor_map.probability_map.shape, dtype=float)
     started = time.perf_counter()
 
     for i, event in enumerate(reader.step_events()):
         result = model.update_step(event["heading_change"], event["step_length_m"], event["dt"])
-        occ = model.occupancy_map(floor_map.shape)
+        occ = model.occupancy_map(floor_map.probability_map.shape)
         occupancy += occ
         x, y = result["position"]
         logger.log({
@@ -79,7 +79,7 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
             "var_x": result["variance"][0],
             "var_y": result["variance"][1],
             "neff": result["neff"],
-            "inside_map": float(floor_map.probability(x, y) > 0.0),
+            "inside_map": float(floor_map.get_probability(x, y) > 0.0),
         })
 
     runtime_s = time.perf_counter() - started
@@ -160,6 +160,8 @@ def main():
         summaries = []
         for model_name in models:
             run_df, occupancy, runtime_s = run_offline(model_name, cfg, floor_map)
+            print(f"{model_name}: {len(run_df)} trajectory points")
+            print(run_df.head())
             out_dir = PROJECT_ROOT / cfg["experiment"]["output_dir"]
             csv_path = out_dir / f"{cfg['experiment']['name']}_{model_name}.csv"
             png_path = out_dir / f"{cfg['experiment']['name']}_{model_name}.png"

@@ -1,52 +1,52 @@
-from __future__ import annotations
-
-from pathlib import Path
-
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 
 
-def save_run_plot(run_df: pd.DataFrame, floor_map, occupancy: np.ndarray, out_path: Path, title: str):
-    fig, ax = plt.subplots(figsize=(9, 4.8))
-    ax.imshow(
-        floor_map.pdf,
-        origin="lower",
-        extent=floor_map.extent(),
-        alpha=0.45,
-        aspect="auto",
-    )
-    if occupancy is not None and occupancy.sum() > 0:
-        occ = occupancy / occupancy.max()
+def save_run_plot(run_df, floor_map, occupancy, png_path, title="trajectory + heat map"):
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    x0 = floor_map.origin_x_m
+    x1 = floor_map.origin_x_m + floor_map.width_m
+    y0 = floor_map.origin_y_m
+    y1 = floor_map.origin_y_m + floor_map.height_m
+
+    if occupancy is not None:
         ax.imshow(
-            occ,
+            occupancy,
             origin="lower",
-            extent=floor_map.extent(),
-            alpha=0.45,
-            aspect="auto",
+            extent=[x0, x1, y0, y1],
+            aspect="equal",
+            alpha=0.65,
         )
-    ax.plot(run_df["x_m"], run_df["y_m"], marker="o", markersize=2, linewidth=1.5)
-    ax.set_xlim(0, floor_map.width_m)
-    ax.set_ylim(0, floor_map.height_m)
+
+    if run_df is not None and not run_df.empty and {"x_m", "y_m"}.issubset(run_df.columns):
+        ax.plot(run_df["x_m"], run_df["y_m"], marker="o", markersize=3, linewidth=1.5)
+
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y0, y1)
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
     ax.set_title(title)
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=180)
+
+    plt.tight_layout()
+    plt.savefig(png_path, dpi=200)
     plt.close(fig)
 
 
-def save_comparison_plot(summary_df: pd.DataFrame, out_path: Path):
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    x = np.arange(len(summary_df))
-    ax.bar(x - 0.18, summary_df["inside_map_ratio"], width=0.36, label="Inside-map ratio")
-    ax.bar(x + 0.18, summary_df["path_length_m"], width=0.36, label="Path length [m]")
-    ax.set_xticks(x)
-    ax.set_xticklabels(summary_df["model"])
-    ax.legend()
-    ax.set_title("Model comparison")
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=180)
+def save_comparison_plot(summary_df, png_path, title="model comparison"):
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    df = summary_df.copy()
+
+    axes[0].bar(df["model"], df["path_length_m"])
+    axes[0].set_title("Path length [m]")
+    axes[0].set_ylabel("meters")
+
+    axes[1].bar(df["model"], df["inside_map_ratio"])
+    axes[1].set_title("Inside-map ratio")
+    axes[1].set_ylabel("ratio")
+    axes[1].set_ylim(0, 1.05)
+
+    fig.suptitle(title)
+    plt.tight_layout()
+    plt.savefig(png_path, dpi=200)
     plt.close(fig)
