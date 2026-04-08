@@ -9,27 +9,27 @@ experiment:
   compare_models: true
 
 initial_state:
-  position: [5.0, 3.5]
-  heading: 0.0
+  position: [5.25, 5.85]
+  heading: -1.57
 
 map:
-  type: football_field
-  file: src/data/floor_plans/football_field_map.pkl
-  width_m: 20.0
-  height_m: 10.0
-  scale_m_per_cell: 0.1
-  sigma_cells: 2.5
-  edge_decay: 0.55
-  center_boost: 0.15
+  type: house_floorplan
+  file: src/data/floor_plans/house_floorplan_pdf.pkl
+  width_m: 3.9
+  height_m: 7.3
+  scale_m_per_cell: 0.05
+  sigma_cells: 2.0
+  edge_decay: 0.0
+  center_boost: 0.0
 
 offline_data:
-  csv_file: src/data/sensor_log_4.csv
+  csv_file: src/data/experiments/pi_sensor_log_turn90.csv
   use_step_column: true
-  heading_column: derived_heading
-  step_column: step_state
+  heading_column: heading_rad
+  step_column: step_event
   dt_column: dt
   timestamp_column: timestamp
-  fixed_step_length_m: 0.72
+  fixed_step_length_m: 0.60
 
 live_data:
   sample_rate_hz: 50
@@ -38,15 +38,16 @@ live_data:
   min_stride_interval_s: 0.30
 
 motion_model:
-  heading_noise_std_rad: 0.18
-  step_length_std_m: 0.12
-  forward_bias_std_rad: 0.25
-  directional_persistence: 0.82
+  heading_noise_std_rad: 0.04
+  step_length_std_m: 0.03
+  forward_bias_std_rad: 0.08
+  directional_persistence: 0.97
   impossible_state_penalty: 0.0
+  turn_gain: 2.0
 
 particle_filter:
-  n_particles: 2500
-  resample_threshold_ratio: 0.55
+  n_particles: 3000
+  resample_threshold_ratio: 0.60
   resample_method: systematic
 
 bayes_filter:
