@@ -129,7 +129,7 @@ class OfflineIMUReader:
                 gyro_z = 0.0
 
             # Integrate turn continuously between steps
-            turn_accum += (gyro_z - self.gyro_bias) * dt
+            turn_accum -= (gyro_z - self.gyro_bias) * dt
 
             if not math.isfinite(turn_accum):
                 turn_accum = 0.0
