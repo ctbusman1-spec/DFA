@@ -71,7 +71,7 @@ def main():
         min_interval_s=args.min_step_interval_s,
     )
 
-    output_file = PROJECT_ROOT / "data" / "experiments" / f"sensor_log_walk_turn90_smooth11.csv"
+    output_file = PROJECT_ROOT / "data" / "experiments" / f"sensor_log_walk_gyro11.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Logging to: {output_file}")
