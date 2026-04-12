@@ -86,7 +86,8 @@ def main():
     if args.timestamped_name:
         file_stem = f"{args.name}_{time.strftime('%Y%m%d_%H%M%S')}"
 
-    output_file = PROJECT_ROOT / "data" / "experiments" / (f"sensor_log_gyro1111.csv")
+    output_file = PROJECT_ROOT / "data" / "experiments" / (f"sensor_log_turn180_111"
+                                                           f".csv")
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Logging to: {output_file}")
