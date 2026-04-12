@@ -3,20 +3,20 @@ filter_type: particle   # particle or discrete_bayes
 random_seed: 42
 
 experiment:
-  name: log_turn3
-  output_dir: data/experiments/turn
+  name: log_compass1turn
+  output_dir: data/experiments/straight2
   save_plots: true
   compare_models: true
 
 initial_state:
-  position: [5.25, 5.85]
+  position: [5.55, 6.25]
   heading: -1.57
 
 map:
   file: data/floor_plans/house_floorplan_pdf.pkl
 
 offline_data:
-  csv_file: data/sensor_log_walk_turn90_3.csv
+  csv_file: data/sensor_log_walk_straight.csv
   heading_column: heading_rad
   step_column: step_event
   dt_column: dt
@@ -28,6 +28,11 @@ live_data:
   fixed_step_length_m: 0.72
   stride_threshold_g: 1.18
   min_stride_interval_s: 0.30
+
+initialization:
+  use_compass_for_initial_heading: true
+  compass_average_seconds: 1.5
+  map_heading_offset_rad: 2.50
 
 motion_model:
   heading_noise_std_rad: 0.03

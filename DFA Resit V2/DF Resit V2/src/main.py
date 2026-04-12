@@ -27,13 +27,17 @@ def ensure_map(cfg):
     return floor_map
 
 
-def build_filter(filter_name, floor_map, cfg):
+def build_filter(filter_name, floor_map, cfg, initial_state_override=None):
+    initial_state = dict(cfg["initial_state"])
+    if initial_state_override is not None:
+        initial_state.update(initial_state_override)
+
     if filter_name == "particle":
         return ParticleFilter(
             floor_map,
             cfg["particle_filter"],
             cfg["motion_model"],
-            cfg["initial_state"],
+            initial_state,
             rng=cfg.get("random_seed", 42),
         )
     if filter_name == "discrete_bayes":
@@ -41,13 +45,14 @@ def build_filter(filter_name, floor_map, cfg):
             floor_map,
             cfg["bayes_filter"],
             cfg["motion_model"],
-            cfg["initial_state"],
+            initial_state,
         )
     raise ValueError(f"Unknown filter type: {filter_name}")
 
 
 def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
     od = cfg["offline_data"]
+    init_cfg = cfg.get("initialization", {})
     csv_file = resolve_project_path(od["csv_file"])
 
     reader = OfflineIMUReader(
@@ -58,7 +63,27 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
         timestamp_col=od["timestamp_column"],
         fixed_step_length_m=od["fixed_step_length_m"],
     )
-    model = build_filter(filter_name, floor_map, cfg)
+
+    initial_state_override = None
+    if init_cfg.get("use_compass_for_initial_heading", False):
+        measured_heading = reader.estimate_initial_heading(
+            average_seconds=float(init_cfg.get("compass_average_seconds", 1.5))
+        )
+        map_heading_offset = float(init_cfg.get("map_heading_offset_rad", 0.0))
+        initial_heading = measured_heading + map_heading_offset
+
+        initial_state_override = {
+            "heading": initial_heading
+        }
+
+        print(
+            f"{filter_name}: initial heading from compass/log = "
+            f"{measured_heading:.3f} rad, map offset = {map_heading_offset:.3f}, "
+            f"used = {initial_heading:.3f} rad"
+        )
+
+    model = build_filter(filter_name, floor_map, cfg, initial_state_override=initial_state_override)
+
     logger = DataLogger(resolve_project_path(cfg["experiment"]["output_dir"]))
     occupancy = np.zeros(floor_map.shape, dtype=float)
     started = time.perf_counter()
@@ -97,9 +122,50 @@ def run_live(filter_name: str, cfg: dict, floor_map: FloorMap):
         min_stride_interval_s=cfg["live_data"]["min_stride_interval_s"],
         fixed_step_length_m=cfg["live_data"]["fixed_step_length_m"],
     )
-    model = build_filter(filter_name, floor_map, cfg)
+
+    init_cfg = cfg.get("initialization", {})
+    initial_state_override = None
+
+    if init_cfg.get("use_compass_for_initial_heading", False):
+        measured_heading = imu.estimate_initial_heading(
+            average_seconds=float(init_cfg.get("compass_average_seconds", 1.5))
+        )
+        map_heading_offset = float(init_cfg.get("map_heading_offset_rad", 0.0))
+        initial_heading = measured_heading + map_heading_offset
+
+        initial_state_override = {
+            "heading": initial_heading
+        }
+
+        print(
+            f"{filter_name}: live initial heading from compass = {measured_heading:.3f} rad, "
+            f"map offset = {map_heading_offset:.3f}, used = {initial_heading:.3f} rad"
+        )
+
+    model = build_filter(filter_name, floor_map, cfg, initial_state_override=initial_state_override)
     logger = DataLogger(resolve_project_path(cfg["experiment"]["output_dir"]))
     occupancy = np.zeros(floor_map.shape, dtype=float)
+
+    while True:
+        event = stride.wait_for_step()
+        result = model.update_step(event["heading_change"], event["step_length_m"], event["dt"])
+        occupancy += model.occupancy_map(floor_map.shape)
+        x, y = result["position"]
+        logger.log({
+            "timestamp": event["timestamp"],
+            "dt": event["dt"],
+            "heading_change_rad": event["heading_change"],
+            "heading_rad": result["heading_rad"],
+            "step_length_m": event["step_length_m"],
+            "x_m": x,
+            "y_m": y,
+            "var_x": result["variance"][0],
+            "var_y": result["variance"][1],
+            "neff": result["neff"],
+            "map_probability": floor_map.get_probability(x, y),
+            "walkable": float(floor_map.is_walkable(x, y)),
+        })
+        print(f"{filter_name}: x={x:.2f} y={y:.2f} heading={result['heading_rad']:.2f} neff={result['neff']:.1f}")
 
     while True:
         event = stride.wait_for_step()

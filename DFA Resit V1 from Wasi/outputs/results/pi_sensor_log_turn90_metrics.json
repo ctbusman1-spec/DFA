@@ -1,0 +1,52 @@
+{
+  "dataset": {
+    "source_name": "pi_sensor_log_turn90.csv",
+    "dataset_type": "pi",
+    "n_samples": 1900,
+    "has_ground_truth": false,
+    "has_gyro": false
+  },
+  "linear_kalman_filter": {
+    "mae_2d_m": null,
+    "rmse_2d_m": null,
+    "max_error_2d_m": null
+  },
+  "bayesian_filter": {
+    "mae_2d_m": null,
+    "rmse_2d_m": null,
+    "max_error_2d_m": null
+  },
+  "particle_filter": {
+    "mae_2d_m": null,
+    "rmse_2d_m": null,
+    "max_error_2d_m": null
+  },
+  "zupt": {
+    "is_stationary": true,
+    "confidence": 1.0,
+    "accel_mean_norm_mps2": 9.791149391334242,
+    "accel_variance_mps2": 0.00020916379723926503,
+    "gyro_mean_norm_rads": 0.0,
+    "gyro_variance_rads": 0.0,
+    "recent_step_count": 0,
+    "samples_processed": 1900
+  },
+  "kalman": {
+    "innovation_norm": 0.00010088806988200037,
+    "zupt_updates": 300,
+    "floor_updates": 1900,
+    "samples_processed": 1900
+  },
+  "bayesian": {
+    "mode_confidence": 0.03050135482572026,
+    "candidate_count": 400,
+    "samples_processed": 1900
+  },
+  "particle": {
+    "n_particles": 500,
+    "effective_sample_size": 411.93480498518403,
+    "resampling_count": 98,
+    "samples_processed": 1900
+  },
+  "floorplan_walkability": null
+}

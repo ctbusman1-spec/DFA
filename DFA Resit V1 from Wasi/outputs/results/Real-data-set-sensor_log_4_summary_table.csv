@@ -1,0 +1,4 @@
+method,mae_2d_m,rmse_2d_m,max_error_2d_m,mae_change_vs_linear_pct
+Linear Kalman Filter,1.444586,2.206112,4.565086,0.0
+Bayesian Filter,1.533367,2.218718,4.593605,6.145774637162481
+Particle Filter,1.495847,2.186907,4.529737,3.5484907094489357

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import pandas as pd
 
 try:
@@ -9,8 +10,16 @@ except Exception:
 
 
 def wrap_angle(angle: float) -> float:
-    import math
     return (angle + math.pi) % (2 * math.pi) - math.pi
+
+
+def circular_mean(angles):
+    angles = list(angles)
+    if len(angles) == 0:
+        return 0.0
+    s = sum(math.sin(a) for a in angles)
+    c = sum(math.cos(a) for a in angles)
+    return math.atan2(s, c)
 
 
 class OfflineIMUReader:
@@ -34,6 +43,23 @@ class OfflineIMUReader:
         missing = [c for c in required if c not in self.df.columns]
         if missing:
             raise ValueError(f"Missing required columns in CSV: {missing}")
+
+    def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
+        """
+        Estimate initial heading from the first seconds of the log.
+        Assumes the user stands still briefly at the beginning.
+        """
+        if self.df.empty:
+            return 0.0
+
+        t0 = float(self.df[self.timestamp_col].iloc[0])
+        mask = self.df[self.timestamp_col] <= (t0 + average_seconds)
+        headings = self.df.loc[mask, self.heading_col].astype(float).tolist()
+
+        if len(headings) == 0:
+            headings = [float(self.df[self.heading_col].iloc[0])]
+
+        return circular_mean(headings)
 
     def step_events(self):
         prev_step_heading = None
@@ -70,3 +96,19 @@ class LiveIMUReader:
     def get_yaw(self) -> float:
         ori = self.sense.get_orientation_radians()
         return float(ori["yaw"])
+
+    def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
+        """
+        Estimate initial heading live from the Sense HAT while standing still.
+        """
+        import time
+
+        headings = []
+        start = time.time()
+        dt_target = 1.0 / max(self.sample_rate_hz, 1)
+
+        while (time.time() - start) < average_seconds:
+            headings.append(self.get_yaw())
+            time.sleep(dt_target)
+
+        return circular_mean(headings)

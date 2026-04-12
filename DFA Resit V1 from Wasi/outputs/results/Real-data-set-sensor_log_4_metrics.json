@@ -1,0 +1,57 @@
+{
+  "dataset": {
+    "source_name": "Real-data-set-sensor_log_4.csv",
+    "dataset_type": "benchmark",
+    "n_samples": 871,
+    "has_ground_truth": true,
+    "has_gyro": true
+  },
+  "linear_kalman_filter": {
+    "mae_2d_m": 1.444586,
+    "rmse_2d_m": 2.206112,
+    "max_error_2d_m": 4.565086
+  },
+  "bayesian_filter": {
+    "mae_2d_m": 1.533367,
+    "rmse_2d_m": 2.218718,
+    "max_error_2d_m": 4.593605
+  },
+  "particle_filter": {
+    "mae_2d_m": 1.495847,
+    "rmse_2d_m": 2.186907,
+    "max_error_2d_m": 4.529737
+  },
+  "zupt": {
+    "is_stationary": false,
+    "confidence": 0.0,
+    "accel_mean_norm_mps2": 9.614927334877919,
+    "accel_variance_mps2": 0.23912985825552843,
+    "gyro_mean_norm_rads": 0.15667819045939554,
+    "gyro_variance_rads": 0.004979805270169375,
+    "recent_step_count": 1,
+    "samples_processed": 871
+  },
+  "kalman": {
+    "innovation_norm": 0.016648905230171346,
+    "zupt_updates": 226,
+    "floor_updates": 871,
+    "samples_processed": 871
+  },
+  "bayesian": {
+    "mode_confidence": 0.02231731082045346,
+    "candidate_count": 400,
+    "samples_processed": 871
+  },
+  "particle": {
+    "n_particles": 500,
+    "effective_sample_size": 413.89782362052676,
+    "resampling_count": 82,
+    "samples_processed": 871
+  },
+  "floorplan_walkability": {
+    "total_samples": 871,
+    "inside_walkable": 871,
+    "outside_walkable": 0,
+    "walkability_percent": 100.0
+  }
+}
