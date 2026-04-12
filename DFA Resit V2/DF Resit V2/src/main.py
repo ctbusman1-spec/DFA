@@ -62,6 +62,8 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
         dt_col=od["dt_column"],
         timestamp_col=od["timestamp_column"],
         fixed_step_length_m=od["fixed_step_length_m"],
+        gyro_col=od.get("gyro_column", "gyro_z_rads"),
+        gyro_bias_estimate_seconds=od.get("gyro_bias_estimate_seconds", 1.5),
     )
 
     initial_state_override = None

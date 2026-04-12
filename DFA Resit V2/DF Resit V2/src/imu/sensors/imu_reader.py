@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import math
+import time
+from typing import Iterator
+
 import pandas as pd
 
 try:
@@ -13,7 +16,7 @@ def wrap_angle(angle: float) -> float:
     return (angle + math.pi) % (2 * math.pi) - math.pi
 
 
-def circular_mean(angles):
+def circular_mean(angles) -> float:
     angles = list(angles)
     if len(angles) == 0:
         return 0.0
@@ -31,6 +34,8 @@ class OfflineIMUReader:
         dt_col: str,
         timestamp_col: str,
         fixed_step_length_m: float,
+        gyro_col: str = "gyro_z_rads",
+        gyro_bias_estimate_seconds: float = 1.5,
     ):
         self.df = pd.read_csv(csv_file)
         self.heading_col = heading_col
@@ -38,17 +43,23 @@ class OfflineIMUReader:
         self.dt_col = dt_col
         self.timestamp_col = timestamp_col
         self.fixed_step_length_m = fixed_step_length_m
+        self.gyro_col = gyro_col
+        self.gyro_bias_estimate_seconds = gyro_bias_estimate_seconds
 
-        required = [self.heading_col, self.step_col, self.dt_col, self.timestamp_col]
+        required = [
+            self.heading_col,
+            self.step_col,
+            self.dt_col,
+            self.timestamp_col,
+            self.gyro_col,
+        ]
         missing = [c for c in required if c not in self.df.columns]
         if missing:
             raise ValueError(f"Missing required columns in CSV: {missing}")
 
+        self.gyro_bias = self.estimate_gyro_bias(self.gyro_bias_estimate_seconds)
+
     def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
-        """
-        Estimate initial heading from the first seconds of the log.
-        Assumes the user stands still briefly at the beginning.
-        """
         if self.df.empty:
             return 0.0
 
@@ -61,25 +72,48 @@ class OfflineIMUReader:
 
         return circular_mean(headings)
 
-    def step_events(self):
-        prev_step_heading = None
+    def estimate_gyro_bias(self, average_seconds: float = 1.5) -> float:
+        if self.df.empty:
+            return 0.0
+
+        t0 = float(self.df[self.timestamp_col].iloc[0])
+        mask = self.df[self.timestamp_col] <= (t0 + average_seconds)
+        vals = self.df.loc[mask, self.gyro_col].astype(float)
+
+        if len(vals) == 0:
+            return 0.0
+
+        return float(vals.mean())
+
+    def step_events(self) -> Iterator[dict]:
+        """
+        Emit one event per detected step.
+        heading_change is the accumulated gyro-integrated turn between steps.
+        """
+        turn_accum = 0.0
 
         for _, row in self.df.iterrows():
-            step_flag = int(row[self.step_col])
-            heading = float(row[self.heading_col])
-            dt = float(row[self.dt_col])
+            dt = max(float(row[self.dt_col]), 1e-3)
             ts = float(row[self.timestamp_col])
+            step_flag = int(row[self.step_col])
+            raw_heading = float(row[self.heading_col])
+            gyro_z = float(row[self.gyro_col])  # assumed rad/s
+
+            # Integrate turn continuously between steps
+            turn_accum += (gyro_z - self.gyro_bias) * dt
 
             if step_flag == 1:
-                heading_change = 0.0 if prev_step_heading is None else wrap_angle(heading - prev_step_heading)
-                prev_step_heading = heading
+                heading_change = wrap_angle(turn_accum)
+
                 yield {
                     "timestamp": ts,
-                    "dt": max(dt, 1e-3),
+                    "dt": dt,
                     "heading_change": heading_change,
                     "step_length_m": self.fixed_step_length_m,
-                    "raw_heading": heading,
+                    "raw_heading": raw_heading,
                 }
+
+                turn_accum = 0.0
 
 
 class LiveIMUReader:
@@ -97,12 +131,17 @@ class LiveIMUReader:
         ori = self.sense.get_orientation_radians()
         return float(ori["yaw"])
 
-    def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
+    def get_gyro_z(self) -> float:
         """
-        Estimate initial heading live from the Sense HAT while standing still.
+        Returns gyroscope z-axis angular velocity in rad/s.
         """
-        import time
+        gyro = self.sense.get_gyroscope_raw()
+        gz = float(gyro["yaw"])
 
+        # Sense HAT often returns degrees/s here, so convert to rad/s.
+        return math.radians(gz)
+
+    def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
         headings = []
         start = time.time()
         dt_target = 1.0 / max(self.sample_rate_hz, 1)

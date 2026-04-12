@@ -89,6 +89,9 @@ def main():
         "accel_y",
         "accel_z",
         "accel_norm",
+        "gyro_x_rads",
+        "gyro_y_rads",
+        "gyro_z_rads",
         "step_event",
     ]
 
