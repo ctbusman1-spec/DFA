@@ -13,7 +13,7 @@ from imu.sensors.imu_reader import LiveIMUReader, OfflineIMUReader
 from imu.sensors.stride_detector import LiveStrideDetector
 from utils.config_utils import load_yaml
 from utils.data_logger import DataLogger
-from utils.paths import PROJECT_ROOT, resolve_project_path
+from utils.paths import resolve_project_path
 from utils.plotting import save_comparison_plot, save_run_plot
 
 
@@ -50,6 +50,24 @@ def build_filter(filter_name, floor_map, cfg, initial_state_override=None):
     raise ValueError(f"Unknown filter type: {filter_name}")
 
 
+def get_map_shape(floor_map: FloorMap):
+    return floor_map.probability_map.shape
+
+
+def safe_walkable(floor_map: FloorMap, x: float, y: float) -> float:
+    try:
+        return float(floor_map.is_walkable(x, y))
+    except Exception:
+        return 0.0
+
+
+def safe_probability(floor_map: FloorMap, x: float, y: float) -> float:
+    try:
+        return float(floor_map.get_probability(x, y))
+    except Exception:
+        return 0.0
+
+
 def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
     od = cfg["offline_data"]
     init_cfg = cfg.get("initialization", {})
@@ -74,9 +92,7 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
         map_heading_offset = float(init_cfg.get("map_heading_offset_rad", 0.0))
         initial_heading = measured_heading + map_heading_offset
 
-        initial_state_override = {
-            "heading": initial_heading
-        }
+        initial_state_override = {"heading": initial_heading}
 
         print(
             f"{filter_name}: initial heading from compass/log = "
@@ -87,28 +103,39 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
     model = build_filter(filter_name, floor_map, cfg, initial_state_override=initial_state_override)
 
     logger = DataLogger(resolve_project_path(cfg["experiment"]["output_dir"]))
-    occupancy = np.zeros(floor_map.shape, dtype=float)
+    occupancy = np.zeros(get_map_shape(floor_map), dtype=float)
     started = time.perf_counter()
 
     for i, event in enumerate(reader.step_events()):
-        result = model.update_step(event["heading_change"], event["step_length_m"], event["dt"])
-        occupancy += model.occupancy_map(floor_map.shape)
+        heading_change = float(event["heading_change"])
+        step_length = float(event["step_length_m"])
+        dt = float(event["dt"])
+
+        if not np.isfinite(heading_change):
+            heading_change = 0.0
+        if not np.isfinite(step_length):
+            step_length = 0.0
+        if not np.isfinite(dt) or dt <= 0:
+            dt = 1e-3
+
+        result = model.update_step(heading_change, step_length, dt)
+        occupancy += model.occupancy_map(get_map_shape(floor_map))
         x, y = result["position"]
 
         logger.log({
             "step_idx": i,
             "timestamp": event["timestamp"],
-            "dt": event["dt"],
-            "heading_change_rad": event["heading_change"],
+            "dt": dt,
+            "heading_change_rad": heading_change,
             "heading_rad": result["heading_rad"],
-            "step_length_m": event["step_length_m"],
+            "step_length_m": step_length,
             "x_m": x,
             "y_m": y,
             "var_x": result["variance"][0],
             "var_y": result["variance"][1],
             "neff": result["neff"],
-            "map_probability": floor_map.get_probability(x, y),
-            "walkable": float(floor_map.is_walkable(x, y)),
+            "map_probability": safe_probability(floor_map, x, y),
+            "walkable": safe_walkable(floor_map, x, y),
         })
 
     runtime_s = time.perf_counter() - started
@@ -117,17 +144,18 @@ def run_offline(filter_name: str, cfg: dict, floor_map: FloorMap):
 
 
 def run_live(filter_name: str, cfg: dict, floor_map: FloorMap):
-    imu = LiveIMUReader(sample_rate_hz=cfg["live_data"]["sample_rate_hz"])
+    ld = cfg["live_data"]
+    init_cfg = cfg.get("initialization", {})
+
+    imu = LiveIMUReader(sample_rate_hz=ld["sample_rate_hz"])
     stride = LiveStrideDetector(
         imu,
-        threshold_g=cfg["live_data"]["stride_threshold_g"],
-        min_stride_interval_s=cfg["live_data"]["min_stride_interval_s"],
-        fixed_step_length_m=cfg["live_data"]["fixed_step_length_m"],
+        threshold_g=ld["stride_threshold_g"],
+        min_stride_interval_s=ld["min_stride_interval_s"],
+        fixed_step_length_m=ld["fixed_step_length_m"],
     )
 
-    init_cfg = cfg.get("initialization", {})
     initial_state_override = None
-
     if init_cfg.get("use_compass_for_initial_heading", False):
         measured_heading = imu.estimate_initial_heading(
             average_seconds=float(init_cfg.get("compass_average_seconds", 1.5))
@@ -135,9 +163,7 @@ def run_live(filter_name: str, cfg: dict, floor_map: FloorMap):
         map_heading_offset = float(init_cfg.get("map_heading_offset_rad", 0.0))
         initial_heading = measured_heading + map_heading_offset
 
-        initial_state_override = {
-            "heading": initial_heading
-        }
+        initial_state_override = {"heading": initial_heading}
 
         print(
             f"{filter_name}: live initial heading from compass = {measured_heading:.3f} rad, "
@@ -146,49 +172,59 @@ def run_live(filter_name: str, cfg: dict, floor_map: FloorMap):
 
     model = build_filter(filter_name, floor_map, cfg, initial_state_override=initial_state_override)
     logger = DataLogger(resolve_project_path(cfg["experiment"]["output_dir"]))
-    occupancy = np.zeros(floor_map.shape, dtype=float)
+    occupancy = np.zeros(get_map_shape(floor_map), dtype=float)
+    started = time.perf_counter()
+    step_idx = 0
 
-    while True:
-        event = stride.wait_for_step()
-        result = model.update_step(event["heading_change"], event["step_length_m"], event["dt"])
-        occupancy += model.occupancy_map(floor_map.shape)
-        x, y = result["position"]
-        logger.log({
-            "timestamp": event["timestamp"],
-            "dt": event["dt"],
-            "heading_change_rad": event["heading_change"],
-            "heading_rad": result["heading_rad"],
-            "step_length_m": event["step_length_m"],
-            "x_m": x,
-            "y_m": y,
-            "var_x": result["variance"][0],
-            "var_y": result["variance"][1],
-            "neff": result["neff"],
-            "map_probability": floor_map.get_probability(x, y),
-            "walkable": float(floor_map.is_walkable(x, y)),
-        })
-        print(f"{filter_name}: x={x:.2f} y={y:.2f} heading={result['heading_rad']:.2f} neff={result['neff']:.1f}")
+    try:
+        while True:
+            event = stride.wait_for_step()
 
-    while True:
-        event = stride.wait_for_step()
-        result = model.update_step(event["heading_change"], event["step_length_m"], event["dt"])
-        occupancy += model.occupancy_map(floor_map.shape)
-        x, y = result["position"]
-        logger.log({
-            "timestamp": event["timestamp"],
-            "dt": event["dt"],
-            "heading_change_rad": event["heading_change"],
-            "heading_rad": result["heading_rad"],
-            "step_length_m": event["step_length_m"],
-            "x_m": x,
-            "y_m": y,
-            "var_x": result["variance"][0],
-            "var_y": result["variance"][1],
-            "neff": result["neff"],
-            "map_probability": floor_map.get_probability(x, y),
-            "walkable": float(floor_map.is_walkable(x, y)),
-        })
-        print(f"{filter_name}: x={x:.2f} y={y:.2f} heading={result['heading_rad']:.2f} neff={result['neff']:.1f}")
+            heading_change = float(event["heading_change"])
+            step_length = float(event["step_length_m"])
+            dt = float(event["dt"])
+
+            if not np.isfinite(heading_change):
+                heading_change = 0.0
+            if not np.isfinite(step_length):
+                step_length = 0.0
+            if not np.isfinite(dt) or dt <= 0:
+                dt = 1e-3
+
+            result = model.update_step(heading_change, step_length, dt)
+            occupancy += model.occupancy_map(get_map_shape(floor_map))
+            x, y = result["position"]
+
+            logger.log({
+                "step_idx": step_idx,
+                "timestamp": event["timestamp"],
+                "dt": dt,
+                "heading_change_rad": heading_change,
+                "heading_rad": result["heading_rad"],
+                "step_length_m": step_length,
+                "x_m": x,
+                "y_m": y,
+                "var_x": result["variance"][0],
+                "var_y": result["variance"][1],
+                "neff": result["neff"],
+                "map_probability": safe_probability(floor_map, x, y),
+                "walkable": safe_walkable(floor_map, x, y),
+            })
+
+            print(
+                f"{filter_name}: step={step_idx:03d} "
+                f"x={x:.2f} y={y:.2f} "
+                f"heading={result['heading_rad']:.2f} "
+                f"neff={result['neff']:.1f}"
+            )
+            step_idx += 1
+
+    except KeyboardInterrupt:
+        print("\nLive run stopped by user.")
+
+    runtime_s = time.perf_counter() - started
+    run_df = logger.to_frame()
+    return run_df, occupancy, runtime_s
 
 
 def summarize_run(model_name: str, run_df: pd.DataFrame, runtime_s: float):
@@ -213,13 +249,33 @@ def summarize_run(model_name: str, run_df: pd.DataFrame, runtime_s: float):
         "model": model_name,
         "n_steps": n_steps,
         "walkable_ratio": float(run_df["walkable"].mean()),
-        "path_length_m": float(np.sqrt(dx**2 + dy**2).sum()),
+        "path_length_m": float(np.sqrt(dx ** 2 + dy ** 2).sum()),
         "runtime_s": float(runtime_s),
         "runtime_ms_per_step": float(1000.0 * runtime_s / max(n_steps, 1)),
-        "mean_neff": float(run_df["neff"].mean()),
+        "mean_neff": float(run_df["neff"].mean()) if "neff" in run_df.columns else np.nan,
         "final_x_m": float(run_df["x_m"].iloc[-1]),
         "final_y_m": float(run_df["y_m"].iloc[-1]),
     }
+
+
+def save_outputs(model_name: str, cfg: dict, floor_map: FloorMap, run_df: pd.DataFrame, occupancy, runtime_s: float):
+    out_dir = resolve_project_path(cfg["experiment"]["output_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = out_dir / f"{cfg['experiment']['name']}_{model_name}.csv"
+    png_path = out_dir / f"{cfg['experiment']['name']}_{model_name}.png"
+
+    run_df.to_csv(csv_path, index=False)
+    save_run_plot(
+        run_df,
+        floor_map,
+        occupancy,
+        png_path,
+        title=f"{model_name} trajectory over floorplan PDF",
+    )
+    print(f"Saved {csv_path.name} and {png_path.name}")
+
+    return summarize_run(model_name, run_df, runtime_s)
 
 
 def main():
@@ -234,34 +290,38 @@ def main():
 
     floor_map = ensure_map(cfg)
 
+    models = [cfg["filter_type"]]
+    if cfg["experiment"].get("compare_models", False):
+        models = ["particle", "discrete_bayes"]
+
+    summaries = []
+
     if cfg["mode"] == "offline":
-        models = [cfg["filter_type"]]
-        if cfg["experiment"].get("compare_models", False):
-            models = ["particle", "discrete_bayes"]
-
-        summaries = []
-        out_dir = resolve_project_path(cfg["experiment"]["output_dir"])
-        out_dir.mkdir(parents=True, exist_ok=True)
-
         for model_name in models:
             run_df, occupancy, runtime_s = run_offline(model_name, cfg, floor_map)
-            csv_path = out_dir / f"{cfg['experiment']['name']}_{model_name}.csv"
-            png_path = out_dir / f"{cfg['experiment']['name']}_{model_name}.png"
+            summaries.append(save_outputs(model_name, cfg, floor_map, run_df, occupancy, runtime_s))
 
-            run_df.to_csv(csv_path, index=False)
-            save_run_plot(run_df, floor_map, occupancy, png_path, title=f"{model_name} trajectory over floorplan PDF")
-            summaries.append(summarize_run(model_name, run_df, runtime_s))
-            print(f"Saved {csv_path.name} and {png_path.name}")
-
-        summary_df = pd.DataFrame(summaries)
-        summary_path = out_dir / f"{cfg['experiment']['name']}_summary.csv"
-        summary_png = out_dir / f"{cfg['experiment']['name']}_comparison.png"
-        summary_df.to_csv(summary_path, index=False)
-        save_comparison_plot(summary_df, summary_png)
-        print("\nSummary")
-        print(summary_df.to_string(index=False))
     else:
-        run_live(cfg["filter_type"], cfg, floor_map)
+        for model_name in models:
+            run_df, occupancy, runtime_s = run_live(model_name, cfg, floor_map)
+            summaries.append(save_outputs(model_name, cfg, floor_map, run_df, occupancy, runtime_s))
+
+    out_dir = resolve_project_path(cfg["experiment"]["output_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    summary_df = pd.DataFrame(summaries)
+    summary_path = out_dir / f"{cfg['experiment']['name']}_summary.csv"
+    summary_png = out_dir / f"{cfg['experiment']['name']}_comparison.png"
+
+    summary_df.to_csv(summary_path, index=False)
+    if len(summary_df) > 0:
+        save_comparison_plot(summary_df, summary_png)
+
+    print("\nSummary")
+    if summary_df.empty:
+        print("No results.")
+    else:
+        print(summary_df.to_string(index=False))
 
 
 if __name__ == "__main__":

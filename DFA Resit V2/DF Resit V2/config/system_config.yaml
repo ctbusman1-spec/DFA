@@ -3,7 +3,7 @@ filter_type: particle   # particle or discrete_bayes
 random_seed: 42
 
 experiment:
-  name: log_turn
+  name: log_turn2
   output_dir: data/experiments/gyro
   save_plots: true
   compare_models: true
@@ -16,7 +16,7 @@ map:
   file: data/floor_plans/house_floorplan_pdf.pkl
 
 offline_data:
-  csv_file: data/sensor_log_walk_turn90_smooth.csv
+  csv_file: data/sensor_log_walk_gyro11.csv
   heading_column: heading_rad
   step_column: step_event
   dt_column: dt

@@ -57,6 +57,24 @@ class OfflineIMUReader:
         if missing:
             raise ValueError(f"Missing required columns in CSV: {missing}")
 
+        # Force numeric parsing so blanks / text become NaN
+        for col in required:
+            self.df[col] = pd.to_numeric(self.df[col], errors="coerce")
+
+        # Step flag should be integer-like; missing means no step
+        self.df[self.step_col] = self.df[self.step_col].fillna(0)
+
+        # Timing columns must exist and be valid
+        self.df = self.df.dropna(subset=[self.dt_col, self.timestamp_col])
+
+        # Heading: fill gaps from nearby values
+        self.df[self.heading_col] = self.df[self.heading_col].ffill().bfill()
+
+        # Gyro: missing values treated as no rotation
+        self.df[self.gyro_col] = self.df[self.gyro_col].fillna(0.0)
+
+        self.df = self.df.reset_index(drop=True)
+
         self.gyro_bias = self.estimate_gyro_bias(self.gyro_bias_estimate_seconds)
 
     def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
@@ -67,8 +85,9 @@ class OfflineIMUReader:
         mask = self.df[self.timestamp_col] <= (t0 + average_seconds)
         headings = self.df.loc[mask, self.heading_col].astype(float).tolist()
 
+        headings = [h for h in headings if math.isfinite(h)]
         if len(headings) == 0:
-            headings = [float(self.df[self.heading_col].iloc[0])]
+            return 0.0
 
         return circular_mean(headings)
 
@@ -78,12 +97,13 @@ class OfflineIMUReader:
 
         t0 = float(self.df[self.timestamp_col].iloc[0])
         mask = self.df[self.timestamp_col] <= (t0 + average_seconds)
-        vals = self.df.loc[mask, self.gyro_col].astype(float)
+        vals = self.df.loc[mask, self.gyro_col].astype(float).tolist()
 
+        vals = [v for v in vals if math.isfinite(v)]
         if len(vals) == 0:
             return 0.0
 
-        return float(vals.mean())
+        return float(sum(vals) / len(vals))
 
     def step_events(self) -> Iterator[dict]:
         """
@@ -93,17 +113,32 @@ class OfflineIMUReader:
         turn_accum = 0.0
 
         for _, row in self.df.iterrows():
-            dt = max(float(row[self.dt_col]), 1e-3)
+            dt = float(row[self.dt_col])
             ts = float(row[self.timestamp_col])
             step_flag = int(row[self.step_col])
             raw_heading = float(row[self.heading_col])
-            gyro_z = float(row[self.gyro_col])  # assumed rad/s
+            gyro_z = float(row[self.gyro_col])  # expected rad/s
+
+            if not math.isfinite(dt) or dt <= 0:
+                continue
+            if not math.isfinite(ts):
+                continue
+            if not math.isfinite(raw_heading):
+                raw_heading = 0.0
+            if not math.isfinite(gyro_z):
+                gyro_z = 0.0
 
             # Integrate turn continuously between steps
             turn_accum += (gyro_z - self.gyro_bias) * dt
 
+            if not math.isfinite(turn_accum):
+                turn_accum = 0.0
+
             if step_flag == 1:
                 heading_change = wrap_angle(turn_accum)
+
+                if not math.isfinite(heading_change):
+                    heading_change = 0.0
 
                 yield {
                     "timestamp": ts,
@@ -125,20 +160,27 @@ class LiveIMUReader:
 
     def get_acceleration_norm(self) -> float:
         acc = self.sense.get_accelerometer_raw()
-        return float((acc["x"] ** 2 + acc["y"] ** 2 + acc["z"] ** 2) ** 0.5)
+        ax = float(acc["x"])
+        ay = float(acc["y"])
+        az = float(acc["z"])
+        return math.sqrt(ax * ax + ay * ay + az * az)
 
     def get_yaw(self) -> float:
         ori = self.sense.get_orientation_radians()
-        return float(ori["yaw"])
+        yaw = float(ori["yaw"])
+        if not math.isfinite(yaw):
+            return 0.0
+        return yaw
 
     def get_gyro_z(self) -> float:
         """
         Returns gyroscope z-axis angular velocity in rad/s.
+        Sense HAT raw gyro often returns degrees/s, so convert.
         """
         gyro = self.sense.get_gyroscope_raw()
         gz = float(gyro["yaw"])
-
-        # Sense HAT often returns degrees/s here, so convert to rad/s.
+        if not math.isfinite(gz):
+            return 0.0
         return math.radians(gz)
 
     def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
@@ -149,5 +191,9 @@ class LiveIMUReader:
         while (time.time() - start) < average_seconds:
             headings.append(self.get_yaw())
             time.sleep(dt_target)
+
+        headings = [h for h in headings if math.isfinite(h)]
+        if len(headings) == 0:
+            return 0.0
 
         return circular_mean(headings)

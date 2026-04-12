@@ -50,6 +50,16 @@ def stop_requested_from_joystick(sense: SenseHat) -> bool:
     return False
 
 
+def safe_float(value, default: float = 0.0) -> float:
+    try:
+        v = float(value)
+        if math.isfinite(v):
+            return v
+        return default
+    except Exception:
+        return default
+
+
 def main():
     if SenseHat is None:
         raise RuntimeError("sense_hat is not available on this machine.")
@@ -60,18 +70,23 @@ def main():
     parser.add_argument("--threshold-g", type=float, default=1.18)
     parser.add_argument("--min-step-interval-s", type=float, default=0.30)
     parser.add_argument("--stop-after-inactive-s", type=float, default=10.0)
+    parser.add_argument("--timestamped-name", action="store_true")
     args = parser.parse_args()
 
     sense = SenseHat()
     sense.clear()
 
-    dt_target = 1.0 / args.sample_rate_hz
+    dt_target = 1.0 / max(args.sample_rate_hz, 1)
     detector = StepDetector(
         threshold_g=args.threshold_g,
         min_interval_s=args.min_step_interval_s,
     )
 
-    output_file = PROJECT_ROOT / "data" / "experiments" / f"sensor_log_walk_gyro11.csv"
+    file_stem = args.name
+    if args.timestamped_name:
+        file_stem = f"{args.name}_{time.strftime('%Y%m%d_%H%M%S')}"
+
+    output_file = PROJECT_ROOT / "data" / "experiments" / f"gyro1.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Logging to: {output_file}")
@@ -114,13 +129,26 @@ def main():
                 dt = loop_start - prev_time
                 prev_time = loop_start
 
-                acc = sense.get_accelerometer_raw()
-                ori = sense.get_orientation_radians()
+                if not math.isfinite(dt) or dt <= 0:
+                    dt = dt_target
 
-                ax = float(acc["x"])
-                ay = float(acc["y"])
-                az = float(acc["z"])
-                heading_rad = float(ori["yaw"])
+                # Accelerometer
+                acc = sense.get_accelerometer_raw()
+                ax = safe_float(acc.get("x", 0.0))
+                ay = safe_float(acc.get("y", 0.0))
+                az = safe_float(acc.get("z", 0.0))
+
+                # Orientation
+                ori = sense.get_orientation_radians()
+                heading_rad = safe_float(ori.get("yaw", 0.0))
+
+                # Gyroscope raw
+                gyro = sense.get_gyroscope_raw()
+
+                # Sense HAT raw gyro is typically in degrees/s -> convert to rad/s
+                gx = math.radians(safe_float(gyro.get("pitch", 0.0)))
+                gy = math.radians(safe_float(gyro.get("roll", 0.0)))
+                gz = math.radians(safe_float(gyro.get("yaw", 0.0)))
 
                 accel_norm = math.sqrt(ax * ax + ay * ay + az * az)
                 step_event = detector.update(accel_norm, timestamp)
@@ -137,7 +165,10 @@ def main():
                     "accel_y": round(ay, 6),
                     "accel_z": round(az, 6),
                     "accel_norm": round(accel_norm, 6),
-                    "step_event": step_event,
+                    "gyro_x_rads": round(gx, 6),
+                    "gyro_y_rads": round(gy, 6),
+                    "gyro_z_rads": round(gz, 6),
+                    "step_event": int(step_event),
                 })
                 f.flush()
                 n_rows += 1
@@ -146,7 +177,7 @@ def main():
                     print(
                         f"t={timestamp:6.2f}s | rows={n_rows:5d} | "
                         f"steps={n_steps:3d} | accel_norm={accel_norm:.3f} | "
-                        f"heading={heading_rad:.3f}"
+                        f"heading={heading_rad:.3f} | gz={gz:.3f} rad/s"
                     )
                     last_status_print = loop_start
 
