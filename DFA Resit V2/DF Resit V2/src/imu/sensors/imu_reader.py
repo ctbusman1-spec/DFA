@@ -173,15 +173,11 @@ class LiveIMUReader:
         return yaw
 
     def get_gyro_z(self) -> float:
-        """
-        Returns gyroscope z-axis angular velocity in rad/s.
-        Sense HAT raw gyro often returns degrees/s, so convert.
-        """
         gyro = self.sense.get_gyroscope_raw()
-        gz = float(gyro["yaw"])
+        gz = float(gyro["z"])
         if not math.isfinite(gz):
             return 0.0
-        return math.radians(gz)
+        return gz
 
     def estimate_initial_heading(self, average_seconds: float = 1.5) -> float:
         headings = []

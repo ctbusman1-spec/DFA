@@ -86,7 +86,7 @@ def main():
     if args.timestamped_name:
         file_stem = f"{args.name}_{time.strftime('%Y%m%d_%H%M%S')}"
 
-    output_file = PROJECT_ROOT / "data" / "experiments" / f"sensor_log_gyro111.csv"
+    output_file = PROJECT_ROOT / "data" / "experiments" / f"sensor_log_gyro1.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Logging to: {output_file}")
@@ -145,10 +145,9 @@ def main():
                 # Gyroscope raw
                 gyro = sense.get_gyroscope_raw()
 
-                # Sense HAT raw gyro is typically in degrees/s -> convert to rad/s
-                gx = math.radians(safe_float(gyro.get("pitch", 0.0)))
-                gy = math.radians(safe_float(gyro.get("roll", 0.0)))
-                gz = math.radians(safe_float(gyro.get("yaw", 0.0)))
+                gx = safe_float(gyro.get("x", 0.0))
+                gy = safe_float(gyro.get("y", 0.0))
+                gz = safe_float(gyro.get("z", 0.0))
 
                 accel_norm = math.sqrt(ax * ax + ay * ay + az * az)
                 step_event = detector.update(accel_norm, timestamp)
