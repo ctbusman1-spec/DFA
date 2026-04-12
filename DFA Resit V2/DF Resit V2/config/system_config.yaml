@@ -1,0 +1,50 @@
+mode: offline   # offline or live
+filter_type: particle   # particle or discrete_bayes
+random_seed: 42
+
+experiment:
+  name: dfa_resit_v2_demo
+  output_dir: data/experiments
+  save_plots: true
+  compare_models: true
+
+initial_state:
+  position: [5.25, 5.85]
+  heading: -1.57
+
+map:
+  file: data/floor_plans/house_floorplan_pdf.pkl
+
+offline_data:
+  csv_file: data/experiments/pi_sensor_log_turnwalk.csv
+  heading_column: heading_rad
+  step_column: step_event
+  dt_column: dt
+  timestamp_column: timestamp
+  fixed_step_length_m: 0.50
+
+live_data:
+  sample_rate_hz: 50
+  fixed_step_length_m: 0.72
+  stride_threshold_g: 1.18
+  min_stride_interval_s: 0.30
+
+motion_model:
+  heading_noise_std_rad: 0.04
+  step_length_std_m: 0.03
+  forward_bias_std_rad: 0.08
+  directional_persistence: 0.97
+  impossible_state_penalty: 1.0e-12
+  turn_gain: 1.0
+
+particle_filter:
+  n_particles: 3000
+  resample_threshold_ratio: 0.60
+  resample_method: systematic
+
+bayes_filter:
+  grid_resolution_xy_m: 0.25
+  heading_bins: 24
+  transition_spread_cells: 1
+  use_stride_ring: true
+  stride_ring_sigma_m: 0.18

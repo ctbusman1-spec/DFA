@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List
+
+import pandas as pd
+
+
+@dataclass
+class DataLogger:
+    output_dir: Path
+    rows: List[dict] = field(default_factory=list)
+
+    def log(self, row: dict) -> None:
+        self.rows.append(row)
+
+    def to_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self.rows)
+
+    def save_csv(self, filename: str) -> Path:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / filename
+        self.to_frame().to_csv(path, index=False)
+        return path
