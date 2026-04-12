@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-
+import argparse
+import csv
+import math
 import sys
+import time
 from pathlib import Path
 
 SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
-
-import argparse
-import csv
-import math
-import time
-from pathlib import Path
 
 from utils.paths import PROJECT_ROOT
 
@@ -33,11 +30,24 @@ class StepDetector:
         above = accel_norm > self.threshold_g
         rising_edge = above and not self.prev_above
         enough_time = (timestamp - self.last_step_time) >= self.min_interval_s
+
         step_event = 1 if (rising_edge and enough_time) else 0
+
         if step_event:
             self.last_step_time = timestamp
+
         self.prev_above = above
         return step_event
+
+
+def stop_requested_from_joystick(sense: SenseHat) -> bool:
+    """
+    Stop logging when the Sense HAT middle joystick button is pressed.
+    """
+    for event in sense.stick.get_events():
+        if event.action == "pressed" and event.direction == "middle":
+            return True
+    return False
 
 
 def main():
@@ -53,15 +63,23 @@ def main():
     args = parser.parse_args()
 
     sense = SenseHat()
-    dt_target = 1.0 / args.sample_rate_hz
-    detector = StepDetector(threshold_g=args.threshold_g, min_interval_s=args.min_step_interval_s)
+    sense.clear()
 
-    output_file = PROJECT_ROOT / "data" / "experiments" / f"{args.name}.csv"
+    dt_target = 1.0 / args.sample_rate_hz
+    detector = StepDetector(
+        threshold_g=args.threshold_g,
+        min_interval_s=args.min_step_interval_s,
+    )
+
+    output_file = PROJECT_ROOT / "data" / "experiments" / f"sensor_log_still.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Logging to: {output_file}")
-    print("Logger stops automatically after 10 seconds without a detected step.")
-    print("Press Ctrl+C to stop earlier.\n")
+    print("Press the Sense HAT middle joystick button to stop.")
+    print(
+        f"Logger also stops automatically after {args.stop_after_inactive_s:.1f}s "
+        "without a detected step.\n"
+    )
 
     fieldnames = [
         "timestamp",
@@ -76,10 +94,11 @@ def main():
 
     start_wall = time.time()
     prev_time = start_wall
-    last_step_timestamp = start_wall
+    last_step_wall = start_wall
     n_rows = 0
     n_steps = 0
     last_status_print = start_wall
+    stop_reason = "unknown"
 
     with output_file.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -105,7 +124,7 @@ def main():
 
                 if step_event:
                     n_steps += 1
-                    last_step_timestamp = loop_start
+                    last_step_wall = loop_start
 
                 writer.writerow({
                     "timestamp": round(timestamp, 6),
@@ -122,24 +141,41 @@ def main():
 
                 if loop_start - last_status_print >= 1.0:
                     print(
-                        f"t={timestamp:6.2f}s | rows={n_rows:5d} | steps={n_steps:3d} | "
-                        f"accel_norm={accel_norm:.3f} | heading={heading_rad:.3f}"
+                        f"t={timestamp:6.2f}s | rows={n_rows:5d} | "
+                        f"steps={n_steps:3d} | accel_norm={accel_norm:.3f} | "
+                        f"heading={heading_rad:.3f}"
                     )
                     last_status_print = loop_start
 
-                if (loop_start - last_step_timestamp) >= args.stop_after_inactive_s:
-                    print(f"\nStopped automatically after {args.stop_after_inactive_s:.1f}s without activity.")
+                # Manual stop via Sense HAT joystick
+                if stop_requested_from_joystick(sense):
+                    stop_reason = "manual_stop_joystick"
+                    print("\nStopped by Sense HAT joystick.")
+                    break
+
+                # Automatic stop after inactivity
+                if (loop_start - last_step_wall) >= args.stop_after_inactive_s:
+                    stop_reason = "inactive_timeout"
+                    print(
+                        f"\nStopped automatically after "
+                        f"{args.stop_after_inactive_s:.1f}s without a detected step."
+                    )
                     break
 
                 elapsed = time.time() - loop_start
                 time.sleep(max(0.0, dt_target - elapsed))
 
         except KeyboardInterrupt:
-            print("\nStopped by user.")
+            stop_reason = "keyboard_interrupt"
+            print("\nStopped by user with Ctrl+C.")
+
+        finally:
+            sense.clear()
 
     print(f"Saved file: {output_file}")
     print(f"Total rows: {n_rows}")
     print(f"Detected steps: {n_steps}")
+    print(f"Stop reason: {stop_reason}")
 
 
 if __name__ == "__main__":
