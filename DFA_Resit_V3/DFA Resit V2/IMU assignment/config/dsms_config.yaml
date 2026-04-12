@@ -1,0 +1,29 @@
+mqtt:
+  broker: localhost
+  port: 1883
+  keepalive: 60
+
+topics:
+  cpu: performance/cpu
+  sense_raw: sensehat/raw_data
+  sense_predicted: sensehat/predicted_location
+
+program1:
+  publish_interval_s: 0.01
+  qos: 0
+  print_every_s: 1.0
+
+program2:
+  dt_s: 0.01
+  qos: 0
+  print_every_s: 1.0
+  stationary_accel_thresh_mps2: 0.2
+
+program3:
+  window_seconds: 1.0
+  print_every_seconds: 0.5
+
+program4:
+  window_seconds: 1.0
+  print_every_seconds: 0.5
+  p_keep: 0.3333333333
